@@ -12,6 +12,13 @@ public:
     DisplayDriver();
     bool init();
     void showBootScreen();
+    void showIdleScreen(const String& ipAddress = "", bool wifiConnected = false, int queueCount = 0);
+    void showScanningScreen();
+    void showVerifyingScreen(const String& studentId);
+    void showAccessGranted(const String& studentName, const String& studentId, const String& room);
+    void showAccessDenied(const String& reason);
+    void showCooldownScreen(unsigned long remainingSeconds);
+    void showOfflineScreen(int queuedCount);
     void clear();
 
 protected:
