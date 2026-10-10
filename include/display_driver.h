@@ -7,6 +7,17 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+enum class ScreenState {
+    BOOT,
+    IDLE,
+    SCANNING,
+    VERIFYING,
+    GRANTED,
+    DENIED,
+    COOLDOWN,
+    OFFLINE
+};
+
 class DisplayDriver {
 public:
     DisplayDriver();
@@ -19,11 +30,18 @@ public:
     void showAccessDenied(const String& reason);
     void showCooldownScreen(unsigned long remainingSeconds);
     void showOfflineScreen(int queuedCount);
+    void update();  // Non-blocking screen timer and animation tick
     void clear();
+
+    ScreenState getCurrentState() const { return currentState; }
 
 protected:
     Adafruit_SSD1306 display;
     bool isAvailable;
+    ScreenState currentState;
+    unsigned long stateHoldUntil;
+    unsigned long lastAnimationTick;
+    bool blinkState;
 };
 
 extern DisplayDriver displayDriver;

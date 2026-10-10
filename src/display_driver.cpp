@@ -5,7 +5,11 @@ DisplayDriver displayDriver;
 
 DisplayDriver::DisplayDriver()
     : display(OLED_SCREEN_WIDTH, OLED_SCREEN_HEIGHT, &Wire, OLED_RESET_PIN),
-      isAvailable(false) {}
+      isAvailable(false),
+      currentState(ScreenState::BOOT),
+      stateHoldUntil(0),
+      lastAnimationTick(0),
+      blinkState(false) {}
 
 bool DisplayDriver::init() {
     Wire.begin(PIN_OLED_SDA, PIN_OLED_SCL);
@@ -20,11 +24,13 @@ bool DisplayDriver::init() {
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
     showBootScreen();
+    stateHoldUntil = millis() + 2500;
     return true;
 }
 
 void DisplayDriver::showBootScreen() {
     if (!isAvailable) return;
+    currentState = ScreenState::BOOT;
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -48,14 +54,15 @@ void DisplayDriver::showBootScreen() {
 
 void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, int queueCount) {
     if (!isAvailable) return;
+    currentState = ScreenState::IDLE;
 
     display.clearDisplay();
     // Header
     display.setTextSize(1);
     display.setCursor(0, 0);
     display.print(NODE_ID);
-    display.setCursor(95, 0);
-    display.print(wifiConnected ? "[ON]" : "[OFF]");
+    display.setCursor(92, 0);
+    display.print(wifiConnected ? "[WIFI]" : "[OFFL]");
 
     display.drawFastHLine(0, 10, 128, SSD1306_WHITE);
 
@@ -75,11 +82,11 @@ void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, 
         display.print("Queue: ");
         display.print(queueCount);
     } else {
-        display.print(wifiConnected ? "Ready" : "Offline Buffer");
+        display.print(wifiConnected ? "Ready" : "Offline Cache");
     }
 
     display.setCursor(85, 54);
-    display.print("Mode:");
+    display.print("Dir:");
     display.print(GATE_DIRECTION);
 
     display.display();
@@ -87,11 +94,12 @@ void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, 
 
 void DisplayDriver::showScanningScreen() {
     if (!isAvailable) return;
+    currentState = ScreenState::SCANNING;
 
     display.clearDisplay();
     display.setTextSize(1);
-    display.setCursor(25, 10);
-    display.println("READING QR CODE");
+    display.setCursor(20, 10);
+    display.println("SCANNING BARCODE");
 
     display.drawRect(20, 26, 88, 16, SSD1306_WHITE);
     display.fillRect(24, 30, 40, 8, SSD1306_WHITE);
@@ -103,6 +111,7 @@ void DisplayDriver::showScanningScreen() {
 
 void DisplayDriver::showVerifyingScreen(const String& studentId) {
     if (!isAvailable) return;
+    currentState = ScreenState::VERIFYING;
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -115,12 +124,14 @@ void DisplayDriver::showVerifyingScreen(const String& studentId) {
     display.println(studentId);
 
     display.setCursor(5, 40);
-    display.println("Checking Backend...");
+    display.println("Querying Backend...");
     display.display();
 }
 
 void DisplayDriver::showAccessGranted(const String& studentName, const String& studentId, const String& room) {
     if (!isAvailable) return;
+    currentState = ScreenState::GRANTED;
+    stateHoldUntil = millis() + 3000;
 
     display.clearDisplay();
     display.fillRect(0, 0, 128, 14, SSD1306_WHITE);
@@ -148,6 +159,8 @@ void DisplayDriver::showAccessGranted(const String& studentName, const String& s
 
 void DisplayDriver::showAccessDenied(const String& reason) {
     if (!isAvailable) return;
+    currentState = ScreenState::DENIED;
+    stateHoldUntil = millis() + 3000;
 
     display.clearDisplay();
     display.fillRect(0, 0, 128, 14, SSD1306_WHITE);
@@ -167,6 +180,8 @@ void DisplayDriver::showAccessDenied(const String& reason) {
 
 void DisplayDriver::showCooldownScreen(unsigned long remainingSeconds) {
     if (!isAvailable) return;
+    currentState = ScreenState::COOLDOWN;
+    stateHoldUntil = millis() + 2000;
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -186,6 +201,8 @@ void DisplayDriver::showCooldownScreen(unsigned long remainingSeconds) {
 
 void DisplayDriver::showOfflineScreen(int queuedCount) {
     if (!isAvailable) return;
+    currentState = ScreenState::OFFLINE;
+    stateHoldUntil = millis() + 2500;
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -201,6 +218,16 @@ void DisplayDriver::showOfflineScreen(int queuedCount) {
     display.println(queuedCount);
 
     display.display();
+}
+
+void DisplayDriver::update() {
+    if (!isAvailable) return;
+
+    // Check if temporary screen hold duration has elapsed
+    if (stateHoldUntil > 0 && millis() >= stateHoldUntil) {
+        stateHoldUntil = 0;
+        showIdleScreen();
+    }
 }
 
 void DisplayDriver::clear() {
