@@ -24,6 +24,7 @@ private:
     const char* wifiSsid;
     const char* wifiPassword;
     unsigned long lastReconnectAttempt;
+    unsigned long currentBackoffIntervalMs;
     bool connectedState;
     bool timeSynced;
 };

@@ -5,8 +5,8 @@ NetworkManager networkManager;
 
 NetworkManager::NetworkManager()
     : wifiSsid(nullptr), wifiPassword(nullptr),
-      lastReconnectAttempt(0), connectedState(false),
-      timeSynced(false) {}
+      lastReconnectAttempt(0), currentBackoffIntervalMs(WIFI_RECONNECT_INTERVAL_MS),
+      connectedState(false), timeSynced(false) {}
 
 void NetworkManager::init(const char* ssid, const char* password) {
     wifiSsid = ssid;
@@ -33,6 +33,7 @@ void NetworkManager::init(const char* ssid, const char* password) {
 
     if (WiFi.status() == WL_CONNECTED) {
         connectedState = true;
+        currentBackoffIntervalMs = WIFI_RECONNECT_INTERVAL_MS;
         Serial.println("\n[NETWORK] Wi-Fi Connected!");
         Serial.print("[NETWORK] IP Address: ");
         Serial.println(WiFi.localIP());
@@ -73,12 +74,10 @@ String NetworkManager::getIsoTimestamp() {
     if (getLocalTime(&timeinfo, 100)) {
         timeSynced = true;
         char buffer[32];
-        // Sri Lanka Standard Time is UTC+05:30
         strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
         return String(buffer);
     }
 
-    // Fallback if NTP sync unavailable
     unsigned long uptimeSec = millis() / 1000;
     char fallback[32];
     snprintf(fallback, sizeof(fallback), "1970-01-01T00:%02lu:%02lu+05:30", uptimeSec / 60, uptimeSec % 60);
@@ -93,15 +92,25 @@ void NetworkManager::update() {
         if (connectedState) {
             Serial.print("[NETWORK] Wi-Fi link re-established. IP: ");
             Serial.println(WiFi.localIP());
+            currentBackoffIntervalMs = WIFI_RECONNECT_INTERVAL_MS; // Reset backoff
         } else {
-            Serial.println("[NETWORK] Wi-Fi link lost! Falling back to offline queue.");
+            Serial.println("[NETWORK] Wi-Fi link lost! Falling back to offline buffer.");
         }
     }
 
-    if (!connectedState && (millis() - lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL_MS)) {
+    // Exponential backoff reconnect
+    if (!connectedState && (millis() - lastReconnectAttempt >= currentBackoffIntervalMs)) {
         lastReconnectAttempt = millis();
-        Serial.println("[NETWORK] Attempting Wi-Fi reconnect...");
+        Serial.print("[NETWORK] Reconnecting (backoff ");
+        Serial.print(currentBackoffIntervalMs / 1000);
+        Serial.println("s)...");
+
         WiFi.reconnect();
+
+        // Increment backoff up to 60s
+        if (currentBackoffIntervalMs < 60000) {
+            currentBackoffIntervalMs = min(currentBackoffIntervalMs * 2, (unsigned long)60000);
+        }
     }
 }
 
