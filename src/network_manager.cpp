@@ -5,7 +5,8 @@ NetworkManager networkManager;
 
 NetworkManager::NetworkManager()
     : wifiSsid(nullptr), wifiPassword(nullptr),
-      lastReconnectAttempt(0), connectedState(false) {}
+      lastReconnectAttempt(0), connectedState(false),
+      timeSynced(false) {}
 
 void NetworkManager::init(const char* ssid, const char* password) {
     wifiSsid = ssid;
@@ -24,7 +25,6 @@ void NetworkManager::init(const char* ssid, const char* password) {
         WiFi.begin(wifiSsid);
     }
 
-    // Initial non-blocking check
     unsigned long startWait = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - startWait < 5000)) {
         delay(250);
@@ -42,6 +42,49 @@ void NetworkManager::init(const char* ssid, const char* password) {
     }
 }
 
+void NetworkManager::initTimeSync(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer) {
+    if (!isConnected()) {
+        Serial.println("[NTP] Wi-Fi not ready. NTP sync deferred.");
+        return;
+    }
+
+    Serial.println("[NTP] Synchronizing internal RTC via SNTP...");
+    configTime(gmtOffsetSec, daylightOffsetSec, ntpServer);
+
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 3000)) {
+        timeSynced = true;
+        Serial.print("[NTP] Time synchronized successfully: ");
+        char buf[64];
+        strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+        Serial.println(buf);
+    } else {
+        timeSynced = false;
+        Serial.println("[NTP] Failed to obtain time from NTP server.");
+    }
+}
+
+bool NetworkManager::isTimeSynced() const {
+    return timeSynced;
+}
+
+String NetworkManager::getIsoTimestamp() {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 100)) {
+        timeSynced = true;
+        char buffer[32];
+        // Sri Lanka Standard Time is UTC+05:30
+        strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);
+        return String(buffer);
+    }
+
+    // Fallback if NTP sync unavailable
+    unsigned long uptimeSec = millis() / 1000;
+    char fallback[32];
+    snprintf(fallback, sizeof(fallback), "1970-01-01T00:%02lu:%02lu+05:30", uptimeSec / 60, uptimeSec % 60);
+    return String(fallback);
+}
+
 void NetworkManager::update() {
     bool currentConnected = (WiFi.status() == WL_CONNECTED);
 
@@ -55,7 +98,6 @@ void NetworkManager::update() {
         }
     }
 
-    // Periodic reconnect attempt if link dropped
     if (!connectedState && (millis() - lastReconnectAttempt >= WIFI_RECONNECT_INTERVAL_MS)) {
         lastReconnectAttempt = millis();
         Serial.println("[NETWORK] Attempting Wi-Fi reconnect...");

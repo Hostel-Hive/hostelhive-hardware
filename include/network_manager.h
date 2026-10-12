@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <time.h>
 
 class NetworkManager {
 public:
@@ -14,11 +15,17 @@ public:
     String getLocalIp() const;
     int getRssi() const;
 
+    // FR012: Exact timestamp logging
+    void initTimeSync(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer);
+    bool isTimeSynced() const;
+    String getIsoTimestamp();
+
 private:
     const char* wifiSsid;
     const char* wifiPassword;
     unsigned long lastReconnectAttempt;
     bool connectedState;
+    bool timeSynced;
 };
 
 extern NetworkManager networkManager;
