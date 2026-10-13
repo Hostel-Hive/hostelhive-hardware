@@ -18,11 +18,12 @@ struct ScanResponse {
 class ApiClient {
 public:
     ApiClient();
-    void init(const String& serverHost, const String& endpoint);
-    ScanResponse dispatchScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso);
+    void init(const String& serverHost, const String& endpoint, const String& deviceApiKey);
+    ScanResponse dispatchScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso, bool isOfflineBatch = false);
 
 private:
     String serverUrl;
+    String apiKey;
 };
 
 extern ApiClient apiClient;

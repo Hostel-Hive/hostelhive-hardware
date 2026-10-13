@@ -4,15 +4,17 @@
 ApiClient apiClient;
 
 ApiClient::ApiClient()
-    : serverUrl("") {}
+    : serverUrl(""), apiKey("") {}
 
-void ApiClient::init(const String& serverHost, const String& endpoint) {
+void ApiClient::init(const String& serverHost, const String& endpoint, const String& deviceApiKey) {
     serverUrl = serverHost + endpoint;
+    apiKey = deviceApiKey;
     Serial.print("[API] Initialized endpoint target: ");
     Serial.println(serverUrl);
+    Serial.println("[API] Hardware pre-shared key provisioned (SDS 6.3).");
 }
 
-ScanResponse ApiClient::dispatchScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso) {
+ScanResponse ApiClient::dispatchScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso, bool isOfflineBatch) {
     ScanResponse resp;
     resp.success = false;
     resp.accessGranted = false;
@@ -26,13 +28,16 @@ ScanResponse ApiClient::dispatchScan(const String& studentId, const String& node
     http.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
     http.addHeader("Content-Type", "application/json");
 
-    // Construct JSON payload using ArduinoJson
+    // SDS 6.3 Security: Provision device identification & authentication headers
+    http.addHeader("X-Device-API-Key", apiKey);
+    http.addHeader("X-Node-ID", nodeId);
+
     StaticJsonDocument<256> doc;
     doc["student_id"] = studentId;
     doc["node_id"] = nodeId;
     doc["direction"] = direction;
     doc["timestamp"] = timestampIso;
-    doc["offline_synced"] = false;
+    doc["offline_synced"] = isOfflineBatch;
 
     String requestBody;
     serializeJson(doc, requestBody);
