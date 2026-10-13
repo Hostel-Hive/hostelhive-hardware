@@ -52,18 +52,46 @@ ScanResponse ApiClient::dispatchScan(const String& studentId, const String& node
         String payload = http.getString();
         Serial.printf("[API] Response code %d: %s\n", httpCode, payload.c_str());
 
+        // Parse JSON response from Go backend
+        StaticJsonDocument<512> responseDoc;
+        DeserializationError error = deserializeJson(responseDoc, payload);
+
+        if (!error) {
+            resp.accessGranted = responseDoc["access"] | false;
+            resp.studentName = responseDoc["student_name"] | "Student";
+            resp.roomNumber = responseDoc["room_number"] | "--";
+            resp.message = responseDoc["message"] | "";
+        } else {
+            // Non-JSON response fallback
+            resp.accessGranted = (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED);
+            resp.studentName = studentId;
+            resp.message = "HTTP " + String(httpCode);
+        }
+
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
             resp.success = true;
-            resp.accessGranted = true;
-            resp.message = "Scan recorded successfully";
+        } else if (httpCode == 403) {
+            resp.success = false;
+            resp.accessGranted = false;
+            if (resp.message.length() == 0) resp.message = "Pass Revoked / Curfew";
+        } else if (httpCode == 401) {
+            resp.success = false;
+            resp.accessGranted = false;
+            resp.message = "Unauthorized Device Key";
+        } else if (httpCode == 429) {
+            resp.success = false;
+            resp.accessGranted = false;
+            resp.message = "Rate Limited Cooldown";
         } else {
             resp.success = false;
             resp.accessGranted = false;
-            resp.message = "Server rejected request";
+            resp.message = "Server Error (" + String(httpCode) + ")";
         }
     } else {
-        Serial.printf("[API] HTTP POST failed, error: %s\n", http.errorToString(httpCode).c_str());
-        resp.message = "Network connection failed";
+        Serial.printf("[API] HTTP POST connection failed, error: %s\n", http.errorToString(httpCode).c_str());
+        resp.success = false;
+        resp.accessGranted = false;
+        resp.message = "Network Timeout / Unreachable";
     }
 
     http.end();
