@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
+#include "api_client.h"
 
 struct QueuedScan {
     String studentId;
@@ -18,6 +19,7 @@ public:
     OfflineQueue();
     bool init();
     bool enqueueScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso);
+    int flushQueue(ApiClient& client);  // Flushes cached records to backend
     int getQueueCount();
     void clearQueue();
 

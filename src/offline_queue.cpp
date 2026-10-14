@@ -7,7 +7,6 @@ OfflineQueue::OfflineQueue()
     : isFsMounted(false), currentCount(0) {}
 
 bool OfflineQueue::init() {
-    // Mount LittleFS file system
     if (!LittleFS.begin(true)) {
         Serial.println("[STORAGE] LittleFS mount failed!");
         isFsMounted = false;
@@ -22,12 +21,7 @@ bool OfflineQueue::init() {
 }
 
 void OfflineQueue::loadCount() {
-    if (!isFsMounted) {
-        currentCount = 0;
-        return;
-    }
-
-    if (!LittleFS.exists(QUEUE_STORAGE_PATH)) {
+    if (!isFsMounted || !LittleFS.exists(QUEUE_STORAGE_PATH)) {
         currentCount = 0;
         return;
     }
@@ -93,6 +87,66 @@ bool OfflineQueue::enqueueScan(const String& studentId, const String& nodeId, co
     currentCount = array.size();
     Serial.printf("[STORAGE] Scan buffered offline. New count: %d\n", currentCount);
     return true;
+}
+
+int OfflineQueue::flushQueue(ApiClient& client) {
+    if (!isFsMounted || !LittleFS.exists(QUEUE_STORAGE_PATH)) {
+        return 0;
+    }
+
+    File readFile = LittleFS.open(QUEUE_STORAGE_PATH, "r");
+    if (!readFile) return 0;
+
+    DynamicJsonDocument doc(4096);
+    DeserializationError error = deserializeJson(doc, readFile);
+    readFile.close();
+
+    if (error || !doc.is<JsonArray>()) {
+        clearQueue();
+        return 0;
+    }
+
+    JsonArray array = doc.as<JsonArray>();
+    int originalCount = array.size();
+    if (originalCount == 0) return 0;
+
+    Serial.printf("[STORAGE] Flushing %d offline scans to server...\n", originalCount);
+    int flushedCount = 0;
+
+    // Remaining items if transmission partially fails
+    DynamicJsonDocument remainingDoc(4096);
+    JsonArray remainingArray = remainingDoc.to<JsonArray>();
+
+    for (JsonObject obj : array) {
+        String studentId = obj["student_id"].as<String>();
+        String nodeId = obj["node_id"].as<String>();
+        String direction = obj["direction"].as<String>();
+        String timestamp = obj["timestamp"].as<String>();
+
+        ScanResponse resp = client.dispatchScan(studentId, nodeId, direction, timestamp, true);
+        if (resp.success) {
+            flushedCount++;
+            delay(50); // Pacing delay to avoid backend storm
+        } else {
+            // Keep in queue for next flush attempt
+            remainingArray.add(obj);
+        }
+    }
+
+    // Save remaining items back
+    if (remainingArray.size() > 0) {
+        File writeFile = LittleFS.open(QUEUE_STORAGE_PATH, "w");
+        if (writeFile) {
+            serializeJson(remainingDoc, writeFile);
+            writeFile.close();
+        }
+        currentCount = remainingArray.size();
+    } else {
+        clearQueue();
+    }
+
+    Serial.printf("[STORAGE] Flush complete. Dispatched: %d | Remaining in buffer: %d\n", flushedCount, currentCount);
+    return flushedCount;
 }
 
 int OfflineQueue::getQueueCount() {
