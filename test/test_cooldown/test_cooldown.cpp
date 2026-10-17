@@ -1,5 +1,5 @@
 #include <unity.h>
-#include <Arduino.h>
+#include "../test_common.h"
 
 #define TEST_COOLDOWN_MS 15000
 

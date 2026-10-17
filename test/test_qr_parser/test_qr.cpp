@@ -1,5 +1,5 @@
 #include <unity.h>
-#include <Arduino.h>
+#include "../test_common.h"
 
 // Mock / Standalone test functions for QR parsing
 struct MockScanResult {
