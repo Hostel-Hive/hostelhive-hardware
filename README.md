@@ -138,6 +138,10 @@ pio device monitor --speed 115200
 
 ### Running Automated Unit Tests
 ```bash
+# Run standalone hardware & API logic test runner (Zero dependencies)
+python test/run_tests.py
+
+# Run PlatformIO Unity unit test suite
 pio test -e native_test
 ```
 

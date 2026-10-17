@@ -1,5 +1,5 @@
 #include <unity.h>
-#include <Arduino.h>
+#include "../test_common.h"
 #include <ArduinoJson.h>
 
 void test_json_payload_serialization(void) {
@@ -10,12 +10,12 @@ void test_json_payload_serialization(void) {
     doc["timestamp"] = "2026-10-15T20:00:00+05:30";
     doc["offline_synced"] = true;
 
-    String output;
+    std::string output;
     size_t bytes = serializeJson(doc, output);
 
     TEST_ASSERT_GREATER_THAN(0, bytes);
-    TEST_ASSERT_TRUE(output.indexOf("HH-STU-2021-CS-045") >= 0);
-    TEST_ASSERT_TRUE(output.indexOf("\"direction\":\"IN\"") >= 0);
+    TEST_ASSERT_TRUE(output.find("HH-STU-2021-CS-045") != std::string::npos);
+    TEST_ASSERT_TRUE(output.find("\"direction\":\"IN\"") != std::string::npos);
 }
 
 void test_json_array_capacity_limit(void) {
