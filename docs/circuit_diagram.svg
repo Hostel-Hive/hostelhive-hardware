@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="100%" height="100%">
+  <defs>
+    <style>
+      .bg { fill: #1e1e2e; }
+      .box { fill: #2a2b3d; stroke: #89b4fa; stroke-width: 2; rx: 8; }
+      .esp-box { fill: #181825; stroke: #cba6f7; stroke-width: 3; rx: 10; }
+      .title { fill: #cdd6f4; font-family: 'Segoe UI', sans-serif; font-size: 20px; font-weight: bold; }
+      .label { fill: #cdd6f4; font-family: 'Segoe UI', sans-serif; font-size: 13px; }
+      .pin { fill: #fab387; font-family: monospace; font-size: 12px; font-weight: bold; }
+      .wire-pwr { stroke: #f38ba8; stroke-width: 2.5; fill: none; }
+      .wire-gnd { stroke: #6c7086; stroke-width: 2.5; fill: none; stroke-dasharray: 4; }
+      .wire-sig { stroke: #89dceb; stroke-width: 2; fill: none; }
+      .wire-i2c { stroke: #f9e2af; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="600" class="bg"/>
+
+  <!-- Title -->
+  <text x="30" y="45" class="title">HostelHive ESP32 IoT Attendance Scanner - Circuit Schematic</text>
+  <text x="30" y="70" class="label" fill="#a6adc8">Academic Reference: SENG 34213 | System Design Specification Section 7.2.2</text>
+
+  <!-- ESP32 Controller Block -->
+  <rect x="330" y="120" width="240" height="420" class="esp-box"/>
+  <text x="390" y="160" class="title" fill="#cba6f7">ESP32-WROOM</text>
+  <text x="405" y="185" class="label">DevKit V1 Node</text>
+  <text x="420" y="210" class="pin">WiFi / BLE</text>
+
+  <!-- Left Pins -->
+  <text x="345" y="260" class="pin">GPIO 21 (SDA)</text>
+  <text x="345" y="290" class="pin">GPIO 22 (SCL)</text>
+  <text x="345" y="350" class="pin">GPIO 16 (RX2)</text>
+  <text x="345" y="380" class="pin">GPIO 17 (TX2)</text>
+  <text x="345" y="440" class="pin">GPIO 34 (BTN)</text>
+  <text x="345" y="500" class="pin">GND</text>
+
+  <!-- Right Pins -->
+  <text x="475" y="260" class="pin">GPIO 18 (G-LED)</text>
+  <text x="475" y="290" class="pin">GPIO 19 (R-LED)</text>
+  <text x="475" y="350" class="pin">GPIO 23 (BUZZ)</text>
+  <text x="475" y="410" class="pin">GPIO 27 (RELAY)</text>
+  <text x="500" y="470" class="pin">VIN (5V)</text>
+  <text x="500" y="500" class="pin">3V3</text>
+
+  <!-- OLED Display Block -->
+  <rect x="50" y="180" width="190" height="110" class="box"/>
+  <text x="75" y="215" class="title" font-size="16">SSD1306 OLED</text>
+  <text x="75" y="240" class="label">128x64 I2C Display</text>
+  <text x="75" y="265" class="pin">SDA | SCL | 3V3 | GND</text>
+
+  <!-- I2C Bus Wires -->
+  <path d="M 240 255 L 290 255 L 290 255 L 340 255" class="wire-i2c"/>
+  <path d="M 240 285 L 280 285 L 280 285 L 340 285" class="wire-i2c"/>
+
+  <!-- QR Scanner Block -->
+  <rect x="50" y="330" width="190" height="100" class="box"/>
+  <text x="75" y="365" class="title" font-size="16">QR / Barcode Mod</text>
+  <text x="75" y="390" class="label">GM66 / UART Serial</text>
+  <text x="75" y="410" class="pin">TXD -> GPIO 16 (RX2)</text>
+
+  <path d="M 240 350 L 340 350" class="wire-sig"/>
+
+  <!-- Push Button Block -->
+  <rect x="50" y="460" width="190" height="70" class="box"/>
+  <text x="75" y="490" class="title" font-size="15">Override Button</text>
+  <text x="75" y="515" class="label">Manual Gate Release (34)</text>
+
+  <path d="M 240 480 L 340 440" class="wire-sig"/>
+
+  <!-- Status LEDs Block -->
+  <rect x="660" y="160" width="190" height="110" class="box"/>
+  <text x="685" y="195" class="title" font-size="16">Status Indicators</text>
+  <circle cx="700" cy="235" r="12" fill="#a6e3a1"/>
+  <text x="725" y="240" class="label">Green LED (GPIO 18)</text>
+  <circle cx="700" cy="255" r="12" fill="#f38ba8"/>
+  <text x="725" y="260" class="label">Red LED (GPIO 19)</text>
+
+  <path d="M 570 255 L 660 235" class="wire-sig"/>
+  <path d="M 570 285 L 660 255" class="wire-sig"/>
+
+  <!-- Piezo Buzzer Block -->
+  <rect x="660" y="300" width="190" height="80" class="box"/>
+  <text x="685" y="335" class="title" font-size="16">Piezo Buzzer</text>
+  <text x="685" y="360" class="label">Audio Feedback (GPIO 23)</text>
+
+  <path d="M 570 350 L 660 340" class="wire-sig"/>
+
+  <!-- 5V Relay Block -->
+  <rect x="660" y="410" width="190" height="120" class="box"/>
+  <text x="685" y="445" class="title" font-size="16">5V Gate Relay</text>
+  <text x="685" y="470" class="label">Solenoid / Turnstile Lock</text>
+  <text x="685" y="495" class="pin">IN: GPIO 27</text>
+  <text x="685" y="515" class="label">Duration: 3000ms pulse</text>
+
+  <path d="M 570 410 L 660 450" class="wire-sig"/>
+
+</svg>
