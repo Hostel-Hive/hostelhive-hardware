@@ -11,7 +11,8 @@
     { "type": "wokwi-relay-module", "id": "relay", "top": 120, "left": -120, "attrs": {} },
     { "type": "wokwi-pushbutton", "id": "btn_override", "top": 140, "left": 120, "attrs": { "color": "blue", "label": "Manual Override" } },
     { "type": "wokwi-resistor", "id": "r_green", "top": -30, "left": 80, "attrs": { "value": "220" } },
-    { "type": "wokwi-resistor", "id": "r_red", "top": -30, "left": 130, "attrs": { "value": "220" } }
+    { "type": "wokwi-resistor", "id": "r_red", "top": -30, "left": 130, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r_override_pullup", "top": 110, "left": 120, "attrs": { "value": "10000" } }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
@@ -38,7 +39,9 @@
     [ "esp:GND.2", "relay:GND", "black", [ "v0" ] ],
 
     [ "esp:34", "btn_override:1.r", "cyan", [ "v0" ] ],
-    [ "btn_override:2.r", "esp:GND.2", "black", [ "v0" ] ]
+    [ "btn_override:2.r", "esp:GND.2", "black", [ "v0" ] ],
+    [ "esp:34", "r_override_pullup:1", "cyan", [ "v0" ] ],
+    [ "r_override_pullup:2", "esp:3V3", "red", [ "v0" ] ]
   ],
   "dependencies": {}
 }

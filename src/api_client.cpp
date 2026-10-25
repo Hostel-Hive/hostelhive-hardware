@@ -1,99 +1,131 @@
 #include "api_client.h"
 #include "config.h"
+#include <esp_system.h>
 
 ApiClient apiClient;
 
 ApiClient::ApiClient()
-    : serverUrl(""), apiKey("") {}
+    : baseUrl(""), rootCa(nullptr), authorization(""), insecure(false), provisioned(false), setupError("not initialized") {}
 
-void ApiClient::init(const String& serverHost, const String& endpoint, const String& deviceApiKey) {
-    serverUrl = serverHost + endpoint;
-    apiKey = deviceApiKey;
-    Serial.print("[API] Initialized endpoint target: ");
-    Serial.println(serverUrl);
-    Serial.println("[API] Hardware pre-shared key provisioned (SDS 6.3).");
-}
+bool ApiClient::init(const char* url, const char* rootCaPem, const char* deviceCredential, bool allowInsecureHttp) {
+    provisioned = false;
+#if !SIMULATION_MODE
+    // Plain HTTP would expose the device credential and student passes on Wi-Fi.
+    allowInsecureHttp = false;
+#endif
+    insecure = allowInsecureHttp;
 
-ScanResponse ApiClient::dispatchScan(const String& studentId, const String& nodeId, const String& direction, const String& timestampIso, bool isOfflineBatch) {
-    ScanResponse resp;
-    resp.success = false;
-    resp.accessGranted = false;
-    resp.studentName = "";
-    resp.roomNumber = "";
-    resp.message = "Initial dispatch";
-    resp.httpCode = 0;
-
-    HTTPClient http;
-    http.begin(serverUrl);
-    http.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
-    http.addHeader("Content-Type", "application/json");
-
-    // SDS 6.3 Security: Provision device identification & authentication headers
-    http.addHeader("X-Device-API-Key", apiKey);
-    http.addHeader("X-Node-ID", nodeId);
-
-    StaticJsonDocument<256> doc;
-    doc["student_id"] = studentId;
-    doc["node_id"] = nodeId;
-    doc["direction"] = direction;
-    doc["timestamp"] = timestampIso;
-    doc["offline_synced"] = isOfflineBatch;
-
-    String requestBody;
-    serializeJson(doc, requestBody);
-
-    Serial.print("[API] Sending POST payload: ");
-    Serial.println(requestBody);
-
-    int httpCode = http.POST(requestBody);
-    resp.httpCode = httpCode;
-
-    if (httpCode > 0) {
-        String payload = http.getString();
-        Serial.printf("[API] Response code %d: %s\n", httpCode, payload.c_str());
-
-        // Parse JSON response from Go backend
-        StaticJsonDocument<512> responseDoc;
-        DeserializationError error = deserializeJson(responseDoc, payload);
-
-        if (!error) {
-            resp.accessGranted = responseDoc["access"] | false;
-            resp.studentName = responseDoc["student_name"] | "Student";
-            resp.roomNumber = responseDoc["room_number"] | "--";
-            resp.message = responseDoc["message"] | "";
-        } else {
-            // Non-JSON response fallback
-            resp.accessGranted = (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED);
-            resp.studentName = studentId;
-            resp.message = "HTTP " + String(httpCode);
-        }
-
-        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-            resp.success = true;
-        } else if (httpCode == 403) {
-            resp.success = false;
-            resp.accessGranted = false;
-            if (resp.message.length() == 0) resp.message = "Pass Revoked / Curfew";
-        } else if (httpCode == 401) {
-            resp.success = false;
-            resp.accessGranted = false;
-            resp.message = "Unauthorized Device Key";
-        } else if (httpCode == 429) {
-            resp.success = false;
-            resp.accessGranted = false;
-            resp.message = "Rate Limited Cooldown";
-        } else {
-            resp.success = false;
-            resp.accessGranted = false;
-            resp.message = "Server Error (" + String(httpCode) + ")";
-        }
-    } else {
-        Serial.printf("[API] HTTP POST connection failed, error: %s\n", http.errorToString(httpCode).c_str());
-        resp.success = false;
-        resp.accessGranted = false;
-        resp.message = "Network Timeout / Unreachable";
+    if (!gate::isValidDeviceCredential(deviceCredential)) {
+        setupError = "DEVICE_CREDENTIAL missing/invalid";
+        Serial.println("[API] Gate locked: DEVICE_CREDENTIAL is not an issued hhd1 credential.");
+        return false;
+    }
+    if (!gate::isHttpsUrl(url) && !insecure) {
+        setupError = "API_BASE_URL must be https";
+        Serial.println("[API] Gate locked: API_BASE_URL must use https://.");
+        return false;
+    }
+    if (!insecure && (rootCaPem == nullptr || strstr(rootCaPem, "REPLACE_WITH") != nullptr ||
+                      strstr(rootCaPem, "-----BEGIN CERTIFICATE-----") == nullptr)) {
+        setupError = "API_ROOT_CA missing";
+        Serial.println("[API] Gate locked: API_ROOT_CA is not a PEM certificate.");
+        return false;
     }
 
+    baseUrl = url;
+    while (baseUrl.endsWith("/")) baseUrl.remove(baseUrl.length() - 1);
+    rootCa = rootCaPem;
+    authorization = String("Bearer ") + deviceCredential;
+    if (!insecure) {
+        tlsClient.setCACert(rootCa);
+    } else {
+        Serial.println("[API] WARNING: insecure HTTP enabled (simulation only).");
+    }
+    provisioned = true;
+    setupError = "";
+    // Never print the credential itself.
+    Serial.printf("[API] Backend: %s (credential loaded)\n", baseUrl.c_str());
+    return true;
+}
+
+bool ApiClient::beginRequest(HTTPClient& http, const char* path) {
+    String url = baseUrl + path;
+    http.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
+    http.setConnectTimeout(HTTP_REQUEST_TIMEOUT_MS);
+    // Redirects could leak the Authorization header to another host.
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    http.setReuse(false);
+    bool ok = insecure ? http.begin(plainClient, url) : http.begin(tlsClient, url);
+    if (!ok) return false;
+    http.addHeader("Authorization", authorization);
+    return true;
+}
+
+int ApiClient::checkDevice() {
+    if (!provisioned) return -1;
+    HTTPClient http;
+    if (!beginRequest(http, API_PATH_DEVICE_CHECK)) return -1;
+    int code = http.GET();
     http.end();
+    return code;
+}
+
+ScanResponse ApiClient::submitScan(const String& qrPayload) {
+    ScanResponse resp;
+    resp.decision = gate::Decision::DENY_UNAVAILABLE;
+    resp.httpCode = 0;
+
+    if (!provisioned || !gate::isValidQrPayload(qrPayload.c_str(), qrPayload.length())) {
+        resp.decision = provisioned ? gate::Decision::DENY_INVALID_PASS : gate::Decision::DENY_DEVICE_UNAUTHORIZED;
+        return resp;
+    }
+
+    // One event ID per physical scan. The backend treats a repeated ID with the
+    // same QR as a retry and returns the original result, so one retry is safe.
+    uint8_t random[16];
+    esp_fill_random(random, sizeof(random));
+    char eventId[37];
+    gate::formatUuidV4(random, eventId);
+
+    StaticJsonDocument<192> body;
+    body["event_id"] = eventId;
+    body["qr"] = qrPayload;
+    String requestBody;
+    serializeJson(body, requestBody);
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+        HTTPClient http;
+        if (!beginRequest(http, API_PATH_DEVICE_SCANS)) {
+            resp.httpCode = -1;
+            continue;
+        }
+        http.addHeader("Content-Type", "application/json");
+        unsigned long started = millis();
+        resp.httpCode = http.POST(requestBody);
+
+        if (resp.httpCode > 0) {
+            String payload = http.getSize() > 2048 ? String("") : http.getString();
+            http.end();
+            StaticJsonDocument<768> doc;
+            if (!deserializeJson(doc, payload)) {
+                resp.outcome = doc["outcome"] | "";
+                resp.accessResult = doc["access_result"] | "";
+                resp.errorCode = doc["error"] | "";
+            }
+            // An unparseable 200 has an empty outcome, which decide() denies.
+            resp.decision = gate::decide(resp.httpCode, resp.outcome.length() ? resp.outcome.c_str() : nullptr,
+                                         resp.errorCode.length() ? resp.errorCode.c_str() : nullptr);
+            Serial.printf("[API] Scan %s -> HTTP %d outcome=%s access=%s error=%s\n", eventId, resp.httpCode,
+                          resp.outcome.c_str(), resp.accessResult.c_str(), resp.errorCode.c_str());
+            return resp;
+        }
+
+        Serial.printf("[API] Scan %s attempt %d failed after %lu ms: %s\n", eventId, attempt + 1, millis() - started,
+                      HTTPClient::errorToString(resp.httpCode).c_str());
+        http.end();
+    }
+
+    // Fail closed: no response means no unlock.
+    resp.decision = gate::Decision::DENY_UNAVAILABLE;
     return resp;
 }

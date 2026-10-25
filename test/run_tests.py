@@ -11,21 +11,22 @@ import time
 import sys
 
 # ============================================================================
-# 1. QR Payload Parser Logic (Mirrors qr_scanner.cpp)
+# 1. QR Payload Parser Logic (Mirrors gate::isValidQrPayload in gate_policy.h)
 # ============================================================================
+import re
+
+QR_PATTERN = re.compile(r"HH1:[0-9a-f]{64}")
+
+
 class QrParser:
     @staticmethod
     def parse_payload(raw_data: str):
-        if not raw_data:
-            return {"is_valid": False, "student_id": "", "error": "Empty QR payload"}
-        
-        sanitized = raw_data.replace("\r", "").replace("\n", "").strip()
+        sanitized = (raw_data or "").strip()
         if len(sanitized) == 0:
-            return {"is_valid": False, "student_id": "", "error": "Empty QR payload"}
-        if len(sanitized) < 4:
-            return {"is_valid": False, "student_id": "", "error": "Payload too short"}
-        
-        return {"is_valid": True, "student_id": sanitized, "error": ""}
+            return {"is_valid": False, "qr": "", "error": "Empty QR payload"}
+        if not QR_PATTERN.fullmatch(sanitized):
+            return {"is_valid": False, "qr": "", "error": "Not a HostelHive pass"}
+        return {"is_valid": True, "qr": sanitized, "error": ""}
 
 
 # ============================================================================
@@ -54,35 +55,24 @@ class CooldownManager:
 
 
 # ============================================================================
-# 3. Offline Buffer Queue (Mirrors LittleFS queue in offline_queue.cpp)
+# 3. Fail-closed gate decision (Mirrors gate::decide in gate_policy.h)
 # ============================================================================
-class OfflineQueueSimulator:
-    def __init__(self, max_capacity: int = 50):
-        self.max_capacity = max_capacity
-        self.queue = []
+ACCEPTED_OUTCOMES = {"recorded", "cooldown", "already_in", "already_out"}
 
-    def enqueue(self, student_id: str, node_id: str, direction: str, timestamp: str):
-        if len(self.queue) >= self.max_capacity:
-            self.queue.pop(0)  # Drop oldest
-        record = {
-            "student_id": student_id,
-            "node_id": node_id,
-            "direction": direction,
-            "timestamp": timestamp,
-            "offline_synced": True
-        }
-        self.queue.append(record)
-        return True
 
-    def flush(self, mock_network_succeeds: bool = True):
-        if not mock_network_succeeds:
-            return 0  # Network still down, keep all
-        flushed_count = len(self.queue)
-        self.queue.clear()
-        return flushed_count
-
-    def count(self):
-        return len(self.queue)
+def gate_decision(http_code: int, outcome=None, error_code=None):
+    if http_code == 200:
+        return "UNLOCK" if outcome in ACCEPTED_OUTCOMES else "DENY_UNAVAILABLE"
+    if http_code == 409 and error_code not in (None, "scanner_direction_required"):
+        return "DENY_BAD_REQUEST"
+    return {
+        422: "DENY_INVALID_PASS",
+        401: "DENY_DEVICE_UNAUTHORIZED",
+        409: "DENY_GATE_NOT_CONFIGURED",
+        400: "DENY_BAD_REQUEST",
+        413: "DENY_BAD_REQUEST",
+        415: "DENY_BAD_REQUEST",
+    }.get(http_code, "DENY_UNAVAILABLE")
 
 
 # ============================================================================
@@ -90,27 +80,29 @@ class OfflineQueueSimulator:
 # ============================================================================
 
 class TestQrScannerParsing(unittest.TestCase):
-    """Test suite for QR raw stream parsing and sanitization."""
+    """Only backend-issued HH1 passes are accepted (H2)."""
 
-    def test_valid_student_id_prefix(self):
-        res = QrParser.parse_payload("HH-STU-2021-CS-045\r\n")
-        self.assertTrue(res["is_valid"])
-        self.assertEqual(res["student_id"], "HH-STU-2021-CS-045")
+    GOOD = "HH1:" + "0123456789abcdef" * 4
 
-    def test_whitespace_and_newline_stripping(self):
-        res = QrParser.parse_payload("   HH-STU-2022-SE-012   \r\n")
+    def test_backend_issued_payload_accepted(self):
+        res = QrParser.parse_payload(self.GOOD + "\r\n")
         self.assertTrue(res["is_valid"])
-        self.assertEqual(res["student_id"], "HH-STU-2022-SE-012")
+        self.assertEqual(res["qr"], self.GOOD)
 
     def test_empty_payload_rejection(self):
         res = QrParser.parse_payload("   \r\n")
         self.assertFalse(res["is_valid"])
         self.assertEqual(res["error"], "Empty QR payload")
 
-    def test_too_short_payload_rejection(self):
-        res = QrParser.parse_payload("AB\n")
-        self.assertFalse(res["is_valid"])
-        self.assertEqual(res["error"], "Payload too short")
+    def test_legacy_and_arbitrary_payloads_rejected(self):
+        for raw in ["HH-STU-2021-CS-045", "HH:STU-001", "STU12345", "AB", "any barcode"]:
+            self.assertFalse(QrParser.parse_payload(raw)["is_valid"], raw)
+
+    def test_case_length_and_charset_enforced(self):
+        self.assertFalse(QrParser.parse_payload(self.GOOD.upper())["is_valid"])
+        self.assertFalse(QrParser.parse_payload(self.GOOD[:-1])["is_valid"])
+        self.assertFalse(QrParser.parse_payload(self.GOOD + "0")["is_valid"])
+        self.assertFalse(QrParser.parse_payload(self.GOOD[:-1] + "g")["is_valid"])
 
 
 class TestScanCooldownDeduplication(unittest.TestCase):
@@ -151,77 +143,38 @@ class TestScanCooldownDeduplication(unittest.TestCase):
         self.assertIn("HH-STU-999", self.mgr.entries)
 
 
-class TestOfflineQueueBuffering(unittest.TestCase):
-    """Test suite for SRS FR015: LittleFS offline queue caching & auto-flush."""
+class TestFailClosedGateDecision(unittest.TestCase):
+    """The gate opens only on a confirmed backend result (H1)."""
 
-    def setUp(self):
-        self.queue = OfflineQueueSimulator(max_capacity=5)
+    def test_unlock_on_accepted_outcomes(self):
+        for outcome in ACCEPTED_OUTCOMES:
+            self.assertEqual(gate_decision(200, outcome), "UNLOCK")
 
-    def test_enqueue_offline_scan(self):
-        self.queue.enqueue("HH-STU-001", "GATE_ENTRY_01", "IN", "2026-10-15T10:00:00+05:30")
-        self.assertEqual(self.queue.count(), 1)
-        self.assertEqual(self.queue.queue[0]["student_id"], "HH-STU-001")
+    def test_unparseable_200_denies(self):
+        self.assertEqual(gate_decision(200, None), "DENY_UNAVAILABLE")
+        self.assertEqual(gate_decision(200, "granted"), "DENY_UNAVAILABLE")
 
-    def test_fifo_ordering(self):
-        self.queue.enqueue("STU-1", "GATE_01", "IN", "T1")
-        self.queue.enqueue("STU-2", "GATE_01", "IN", "T2")
-        self.assertEqual(self.queue.queue[0]["student_id"], "STU-1")
-        self.assertEqual(self.queue.queue[1]["student_id"], "STU-2")
+    def test_network_failures_deny(self):
+        for code in (0, -1, -11):
+            self.assertEqual(gate_decision(code), "DENY_UNAVAILABLE")
 
-    def test_capacity_overflow_eviction(self):
-        for i in range(5):
-            self.queue.enqueue(f"STU-{i}", "GATE_01", "IN", f"T{i}")
-        # Enqueue 6th item, should drop STU-0
-        self.queue.enqueue("STU-OVERFLOW", "GATE_01", "IN", "T_NEW")
-        self.assertEqual(self.queue.count(), 5)
-        self.assertEqual(self.queue.queue[0]["student_id"], "STU-1")
-        self.assertEqual(self.queue.queue[-1]["student_id"], "STU-OVERFLOW")
-
-    def test_auto_flush_on_reconnection(self):
-        self.queue.enqueue("STU-A", "GATE_01", "IN", "T1")
-        self.queue.enqueue("STU-B", "GATE_01", "IN", "T2")
-        self.assertEqual(self.queue.count(), 2)
-
-        # Wi-Fi returns
-        flushed = self.queue.flush(mock_network_succeeds=True)
-        self.assertEqual(flushed, 2)
-        self.assertEqual(self.queue.count(), 0)
-
-    def test_failed_flush_preserves_buffer(self):
-        self.queue.enqueue("STU-A", "GATE_01", "IN", "T1")
-        # Network call fails
-        flushed = self.queue.flush(mock_network_succeeds=False)
-        self.assertEqual(flushed, 0)
-        self.assertEqual(self.queue.count(), 1)
+    def test_error_statuses_deny(self):
+        self.assertEqual(gate_decision(422), "DENY_INVALID_PASS")
+        self.assertEqual(gate_decision(401), "DENY_DEVICE_UNAUTHORIZED")
+        self.assertEqual(gate_decision(409, None, "scanner_direction_required"), "DENY_GATE_NOT_CONFIGURED")
+        self.assertEqual(gate_decision(409, None, "event_id_conflict"), "DENY_BAD_REQUEST")
+        for code in (201, 302, 403, 500, 503):
+            self.assertEqual(gate_decision(code), "DENY_UNAVAILABLE")
 
 
 class TestApiContractConformance(unittest.TestCase):
-    """Test suite for SDS 6.3 & FR011 Hardware REST API contracts."""
+    """Request shape matches POST /api/v1/device/scans."""
 
     def test_payload_json_structure(self):
-        payload = {
-            "student_id": "HH-STU-2021-CS-045",
-            "node_id": "GATE_ENTRY_01",
-            "direction": "IN",
-            "timestamp": "2026-10-15T20:00:00+05:30",
-            "offline_synced": False
-        }
-        encoded = json.dumps(payload)
-        decoded = json.loads(encoded)
-
-        self.assertIn("student_id", decoded)
-        self.assertIn("node_id", decoded)
-        self.assertIn("direction", decoded)
-        self.assertIn("timestamp", decoded)
-        self.assertIn("offline_synced", decoded)
-
-    def test_response_code_evaluation(self):
-        # 200 OK -> Granted
-        self.assertTrue(200 == 200)
-        # 403 Forbidden -> Denied
-        self.assertFalse(403 == 200)
-        # 429 Too Many Requests -> Cooldown
-        self.assertEqual(429, 429)
+        payload = {"event_id": "3f2a8c4e-1b6d-4e9a-9c7f-2d5e8a1b4c6f", "qr": "HH1:" + "ab" * 32}
+        decoded = json.loads(json.dumps(payload))
+        self.assertEqual(set(decoded), {"event_id", "qr"})
+        self.assertTrue(QrParser.parse_payload(decoded["qr"])["is_valid"])
 
 
 if __name__ == "__main__":
@@ -229,7 +182,7 @@ if __name__ == "__main__":
     print("  HostelHive Hardware & IoT Automated Test Suite (SENG 34213)   ")
     print("==================================================================")
     suite = unittest.TestSuite()
-    for tc in [TestQrScannerParsing, TestScanCooldownDeduplication, TestOfflineQueueBuffering, TestApiContractConformance]:
+    for tc in [TestQrScannerParsing, TestScanCooldownDeduplication, TestFailClosedGateDecision, TestApiContractConformance]:
         suite.addTests(unittest.TestLoader().loadTestsFromTestCase(tc))
 
     runner = unittest.TextTestRunner(verbosity=2)

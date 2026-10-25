@@ -52,7 +52,7 @@ void DisplayDriver::showBootScreen() {
     display.display();
 }
 
-void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, int queueCount) {
+void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, unsigned long overrideCount) {
     if (!isAvailable) return;
     currentState = ScreenState::IDLE;
 
@@ -78,11 +78,13 @@ void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, 
     // Footer
     display.drawFastHLine(0, 50, 128, SSD1306_WHITE);
     display.setCursor(0, 54);
-    if (queueCount > 0) {
-        display.print("Queue: ");
-        display.print(queueCount);
+    if (!wifiConnected) {
+        display.print("Offline-Locked");
+    } else if (overrideCount > 0) {
+        display.print("Ovr: ");
+        display.print(overrideCount);
     } else {
-        display.print(wifiConnected ? "Ready" : "Offline Cache");
+        display.print("Ready");
     }
 
     display.setCursor(85, 54);
@@ -199,7 +201,7 @@ void DisplayDriver::showCooldownScreen(unsigned long remainingSeconds) {
     display.display();
 }
 
-void DisplayDriver::showOfflineScreen(int queuedCount) {
+void DisplayDriver::showOfflineScreen() {
     if (!isAvailable) return;
     currentState = ScreenState::OFFLINE;
     stateHoldUntil = millis() + 2500;
@@ -207,15 +209,14 @@ void DisplayDriver::showOfflineScreen(int queuedCount) {
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(10, 5);
-    display.println("OFFLINE RECORDING");
+    display.println("OFFLINE - LOCKED");
     display.drawFastHLine(0, 16, 128, SSD1306_WHITE);
 
     display.setCursor(0, 26);
-    display.println("Scan saved locally.");
+    display.println("Server unreachable.");
 
     display.setCursor(0, 42);
-    display.print("Pending Queue: ");
-    display.println(queuedCount);
+    display.println("Contact security.");
 
     display.display();
 }

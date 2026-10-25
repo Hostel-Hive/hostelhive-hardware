@@ -44,9 +44,10 @@ jobs:
         run: |
           cp include/secrets.example.h include/secrets.h
 
-      - name: Compile ESP32 Firmware
+      - name: Compile ESP32 Firmware (simulation and production)
         run: |
           pio run -e esp32dev
+          pio run -e esp32prod
 
       - name: Verify Binary Size Constraints
         run: |
