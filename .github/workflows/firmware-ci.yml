@@ -1,0 +1,58 @@
+name: HostelHive Firmware CI
+
+# Triggers per SDS Section 7.5.3 (IoT Deployment Consideration)
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    name: PlatformIO Compile & Unit Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Cache PlatformIO & Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Run Standalone Python Hardware & API Tests
+        run: |
+          python test/run_tests.py
+
+      - name: Install PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Provide Dummy Secrets for CI Build
+        run: |
+          cp include/secrets.example.h include/secrets.h
+
+      - name: Compile ESP32 Firmware
+        run: |
+          pio run -e esp32dev
+
+      - name: Verify Binary Size Constraints
+        run: |
+          echo "Verifying firmware binary size does not exceed ESP32 flash partition limits..."
+          pio run -e esp32dev --target checkprogsize
+
+      - name: Run Native PlatformIO Unity Unit Tests
+        run: |
+          pio test -e native_test
