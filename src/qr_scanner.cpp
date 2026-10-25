@@ -1,12 +1,13 @@
 #include "qr_scanner.h"
 #include "config.h"
+#include "gate_policy.h"
 
 QrScanner qrScanner;
 
 QrScanner::QrScanner()
     : scannerSerial(&Serial2), cooldownCount(0) {
     for (int i = 0; i < MAX_COOLDOWN_ENTRIES; i++) {
-        cooldownBuffer[i].studentId = "";
+        cooldownBuffer[i].qrPayload = "";
         cooldownBuffer[i].timestampMillis = 0;
     }
 }
@@ -29,63 +30,78 @@ bool QrScanner::hasData() {
 #endif
 }
 
-String QrScanner::readRawPayload() {
-    String payload = "";
+// Reads one line, capped at MAX_SCANNER_LINE_LENGTH so a malicious or faulty
+// scanner cannot exhaust heap. Over-long lines are drained and returned empty.
+static String readBoundedLine(Stream& in) {
+    String line;
+    bool overflow = false;
+    unsigned long deadline = millis() + 200;
+    while (millis() < deadline) {
+        if (in.available() <= 0) {
+            delay(1);
+            continue;
+        }
+        char c = (char)in.read();
+        if (c == '\n') break;
+        if (line.length() >= MAX_SCANNER_LINE_LENGTH) {
+            overflow = true;
+            continue;
+        }
+        line += c;
+    }
+    if (overflow) return String("");
+    line.trim();
+    return line;
+}
 
+String QrScanner::readRawPayload() {
     if (Serial2.available() > 0) {
-        payload = Serial2.readStringUntil('\n');
+        return readBoundedLine(Serial2);
     }
 #if SIMULATION_MODE
-    else if (Serial.available() > 0) {
-        payload = Serial.readStringUntil('\n');
+    if (Serial.available() > 0) {
+        return readBoundedLine(Serial);
     }
 #endif
-
-    payload.trim();
-    return payload;
+    return String("");
 }
 
 ScanResult QrScanner::parsePayload(const String& rawData) {
     ScanResult result;
     result.isValid = false;
-    result.rawToken = rawData;
-    result.studentId = "";
+    result.qrPayload = "";
     result.errorReason = "";
 
-    if (rawData.length() == 0) {
+    String sanitized = rawData;
+    sanitized.trim();
+
+    if (sanitized.length() == 0) {
         result.errorReason = "Empty QR payload";
         return result;
     }
 
-    String sanitized = rawData;
-    sanitized.replace("\r", "");
-    sanitized.replace("\n", "");
-    sanitized.trim();
-
-    if (sanitized.length() < 4) {
-        result.errorReason = "Payload too short";
+    // Only the backend-issued format is accepted; student IDs, URLs or any
+    // other barcode are rejected locally and never reach the gate relay.
+    if (!gate::isValidQrPayload(sanitized.c_str(), sanitized.length())) {
+        result.errorReason = "Not a HostelHive pass";
         return result;
     }
 
-    if (sanitized.startsWith("HH:") || sanitized.startsWith("HH-")) {
-        result.studentId = sanitized;
-        result.isValid = true;
-    } else if (sanitized.indexOf("STU") >= 0 || sanitized.indexOf("stu") >= 0) {
-        result.studentId = sanitized;
-        result.isValid = true;
-    } else {
-        result.studentId = sanitized;
-        result.isValid = true;
-    }
-
+    result.qrPayload = sanitized;
+    result.isValid = true;
     return result;
 }
 
-bool QrScanner::isCooldownActive(const String& studentId, unsigned long& remainingSecondsOut) {
+String QrScanner::redact(const String& qrPayload) {
+    if (qrPayload.length() <= 8) return String("****");
+    return qrPayload.substring(0, 8) + "...";
+}
+
+bool QrScanner::isCooldownActive(const String& qrPayload, unsigned long& remainingSecondsOut) {
     unsigned long now = millis();
 
     for (int i = 0; i < cooldownCount; i++) {
-        if (cooldownBuffer[i].studentId == studentId) {
+        if (cooldownBuffer[i].qrPayload == qrPayload) {
             unsigned long elapsed = now - cooldownBuffer[i].timestampMillis;
             if (elapsed < SCAN_COOLDOWN_MS) {
                 remainingSecondsOut = (SCAN_COOLDOWN_MS - elapsed + 999) / 1000;
@@ -98,12 +114,12 @@ bool QrScanner::isCooldownActive(const String& studentId, unsigned long& remaini
     return false;
 }
 
-void QrScanner::registerScan(const String& studentId) {
+void QrScanner::registerScan(const String& qrPayload) {
     unsigned long now = millis();
 
     // Check if entry exists and update
     for (int i = 0; i < cooldownCount; i++) {
-        if (cooldownBuffer[i].studentId == studentId) {
+        if (cooldownBuffer[i].qrPayload == qrPayload) {
             cooldownBuffer[i].timestampMillis = now;
             return;
         }
@@ -111,7 +127,7 @@ void QrScanner::registerScan(const String& studentId) {
 
     // Add new entry or replace oldest
     if (cooldownCount < MAX_COOLDOWN_ENTRIES) {
-        cooldownBuffer[cooldownCount].studentId = studentId;
+        cooldownBuffer[cooldownCount].qrPayload = qrPayload;
         cooldownBuffer[cooldownCount].timestampMillis = now;
         cooldownCount++;
     } else {
@@ -124,7 +140,7 @@ void QrScanner::registerScan(const String& studentId) {
                 oldestIndex = i;
             }
         }
-        cooldownBuffer[oldestIndex].studentId = studentId;
+        cooldownBuffer[oldestIndex].qrPayload = qrPayload;
         cooldownBuffer[oldestIndex].timestampMillis = now;
     }
 }
