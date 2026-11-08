@@ -3,7 +3,11 @@
 #define HOSTELHIVE_API_CLIENT_H
 
 #include <Arduino.h>
+#if defined(ESP8266)
+#include <ESP8266HTTPClient.h>
+#else
 #include <HTTPClient.h>
+#endif
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
@@ -40,6 +44,10 @@ private:
     const char* setupError;
     WiFiClientSecure tlsClient;
     WiFiClient plainClient;
+#if defined(ESP8266)
+    // BearSSL keeps a pointer to the parsed CA list, so it must outlive tlsClient.
+    BearSSL::X509List* trustAnchors;
+#endif
 };
 
 extern ApiClient apiClient;

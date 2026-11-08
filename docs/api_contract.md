@@ -54,3 +54,8 @@ Example 200 body:
 
 ## Manual overrides
 The backend has no override endpoint yet. Overrides are appended to `/override_log.jsonl` on the device's flash (with sequence number, node, time and uptime) and printed to serial. Send `overrides` over the USB console to dump the log.
+
+## RFID gates (NodeMCU build)
+RFID gates use the same request. The student's card stores their `HH1:` pass (sector 1, see `include/card_format.h`), and the gate sends it as `qr` exactly as if it had been scanned from the QR code. The backend needs no RFID support, and the card UID is never sent or used to identify a student.
+
+Because the backend's pass is stable (it is not rotated), a card keeps working until it is wiped. If a student's pass were ever reissued, their card would need to be provisioned again.

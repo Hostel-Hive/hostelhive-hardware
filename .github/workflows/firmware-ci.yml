@@ -49,6 +49,11 @@ jobs:
           pio run -e esp32dev
           pio run -e esp32prod
 
+      - name: Compile NodeMCU (ESP8266) RFID Firmware
+        run: |
+          pio run -e nodemcu
+          pio run -e nodemcu_dev
+
       - name: Verify Binary Size Constraints
         run: |
           echo "Verifying firmware binary size does not exceed ESP32 flash partition limits..."

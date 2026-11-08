@@ -6,13 +6,19 @@ BuzzerLedController feedbackController;
 BuzzerLedController::BuzzerLedController()
     : isToneActive(false), toneEndTime(0) {}
 
+// A pin of -1 means the LED is not fitted on this board.
+static void writeLed(int pin, bool on) {
+    if (pin < 0) return;
+    digitalWrite(pin, on ? LED_ACTIVE_LEVEL : !LED_ACTIVE_LEVEL);
+}
+
 void BuzzerLedController::init() {
-    pinMode(PIN_LED_GREEN, OUTPUT);
-    pinMode(PIN_LED_RED, OUTPUT);
+    if (PIN_LED_GREEN >= 0) pinMode(PIN_LED_GREEN, OUTPUT);
+    if (PIN_LED_RED >= 0) pinMode(PIN_LED_RED, OUTPUT);
     pinMode(PIN_BUZZER, OUTPUT);
 
-    digitalWrite(PIN_LED_GREEN, LOW);
-    digitalWrite(PIN_LED_RED, LOW);
+    setGreenLed(false);
+    setRedLed(false);
     digitalWrite(PIN_BUZZER, LOW);
 
     // Boot chirp
@@ -20,19 +26,15 @@ void BuzzerLedController::init() {
 }
 
 void BuzzerLedController::setGreenLed(bool state) {
-    digitalWrite(PIN_LED_GREEN, state ? HIGH : LOW);
+    writeLed(PIN_LED_GREEN, state);
 }
 
 void BuzzerLedController::setRedLed(bool state) {
-    digitalWrite(PIN_LED_RED, state ? HIGH : LOW);
+    writeLed(PIN_LED_RED, state);
 }
 
 void BuzzerLedController::playTone(unsigned int frequency, unsigned long durationMs) {
-#if defined(ESP32)
     tone(PIN_BUZZER, frequency, durationMs);
-#else
-    tone(PIN_BUZZER, frequency, durationMs);
-#endif
     isToneActive = true;
     toneEndTime = millis() + durationMs;
 }

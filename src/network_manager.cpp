@@ -3,6 +3,26 @@
 
 NetworkManager networkManager;
 
+// ESP32 has getLocalTime(); the ESP8266 core does not, so wait for SNTP to set
+// the clock (anything before 2023 means "not synced yet").
+static bool readLocalTime(struct tm* info, uint32_t waitMs) {
+#if defined(ESP8266)
+    const time_t SYNCED_AFTER = 1672531200;  // 2023-01-01
+    unsigned long start = millis();
+    do {
+        time_t now = time(nullptr);
+        if (now > SYNCED_AFTER) {
+            localtime_r(&now, info);
+            return true;
+        }
+        delay(10);
+    } while (millis() - start < waitMs);
+    return false;
+#else
+    return getLocalTime(info, waitMs);
+#endif
+}
+
 NetworkManager::NetworkManager()
     : wifiSsid(nullptr), wifiPassword(nullptr),
       lastReconnectAttempt(0), currentBackoffIntervalMs(WIFI_RECONNECT_INTERVAL_MS),
@@ -12,6 +32,10 @@ void NetworkManager::init(const char* ssid, const char* password) {
     wifiSsid = ssid;
     wifiPassword = password;
 
+#if defined(ESP8266)
+    // Don't rewrite the credentials to flash on every boot.
+    WiFi.persistent(false);
+#endif
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     delay(100);
@@ -45,6 +69,11 @@ void NetworkManager::init(const char* ssid, const char* password) {
 
 void NetworkManager::initTimeSync(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer) {
     if (!isConnected()) {
+#if defined(ESP8266)
+        // The ESP8266 SNTP client keeps retrying in the background, so start it
+        // now: HTTPS certificate checks fail until the clock is set.
+        configTime(gmtOffsetSec, daylightOffsetSec, ntpServer);
+#endif
         Serial.println("[NTP] Wi-Fi not ready. NTP sync deferred.");
         return;
     }
@@ -53,7 +82,7 @@ void NetworkManager::initTimeSync(long gmtOffsetSec, int daylightOffsetSec, cons
     configTime(gmtOffsetSec, daylightOffsetSec, ntpServer);
 
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 3000)) {
+    if (readLocalTime(&timeinfo, 3000)) {
         timeSynced = true;
         Serial.print("[NTP] Time synchronized successfully: ");
         char buf[64];
@@ -71,7 +100,7 @@ bool NetworkManager::isTimeSynced() const {
 
 String NetworkManager::getIsoTimestamp() {
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 100)) {
+    if (readLocalTime(&timeinfo, 100)) {
         timeSynced = true;
         char buffer[32];
         strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S+05:30", &timeinfo);

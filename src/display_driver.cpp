@@ -3,6 +3,8 @@
 
 DisplayDriver displayDriver;
 
+#if HAS_OLED
+
 DisplayDriver::DisplayDriver()
     : display(OLED_SCREEN_WIDTH, OLED_SCREEN_HEIGHT, &Wire, OLED_RESET_PIN),
       isAvailable(false),
@@ -237,3 +239,83 @@ void DisplayDriver::clear() {
         display.display();
     }
 }
+
+#else  // !HAS_OLED: status lines on the serial log
+
+// The idle screen is re-drawn every few seconds and a misconfigured gate keeps
+// re-showing its error, so an identical line is only repeated after this long.
+static const unsigned long REPEAT_SUPPRESS_MS = 60000;
+
+DisplayDriver::DisplayDriver()
+    : lastLine(""), lastLineAt(0), isAvailable(true), currentState(ScreenState::BOOT), stateHoldUntil(0),
+      lastAnimationTick(0), blinkState(false) {}
+
+void DisplayDriver::logStatus(const String& line) {
+    if (line == lastLine && millis() - lastLineAt < REPEAT_SUPPRESS_MS) return;
+    lastLine = line;
+    lastLineAt = millis();
+    Serial.print("[GATE] ");
+    Serial.println(line);
+}
+
+bool DisplayDriver::init() {
+    showBootScreen();
+    return true;
+}
+
+void DisplayDriver::showBootScreen() {
+    currentState = ScreenState::BOOT;
+    logStatus(String("HOSTEL HIVE ") + NODE_ID + " v" + HOSTELHIVE_FIRMWARE_VERSION + " on " + HH_BOARD_NAME);
+}
+
+void DisplayDriver::showIdleScreen(const String& ipAddress, bool wifiConnected, unsigned long overrideCount) {
+    currentState = ScreenState::IDLE;
+    String line = wifiConnected ? String("READY - tap card | IP ") + ipAddress : String("OFFLINE - LOCKED");
+    if (overrideCount > 0) line += " | overrides " + String(overrideCount);
+    logStatus(line);
+}
+
+void DisplayDriver::showScanningScreen() {
+    currentState = ScreenState::SCANNING;
+}
+
+void DisplayDriver::showVerifyingScreen(const String& studentId) {
+    currentState = ScreenState::VERIFYING;
+    logStatus("AUTHENTICATING " + studentId);
+}
+
+void DisplayDriver::showAccessGranted(const String& studentName, const String& studentId, const String& room) {
+    currentState = ScreenState::GRANTED;
+    stateHoldUntil = millis() + 3000;
+    logStatus("ACCESS GRANTED | " + studentName + " | " + studentId + " | " + room);
+}
+
+void DisplayDriver::showAccessDenied(const String& reason) {
+    currentState = ScreenState::DENIED;
+    stateHoldUntil = millis() + 3000;
+    logStatus("ACCESS DENIED | " + reason);
+}
+
+void DisplayDriver::showCooldownScreen(unsigned long remainingSeconds) {
+    currentState = ScreenState::COOLDOWN;
+    stateHoldUntil = millis() + 2000;
+    logStatus("DUPLICATE SCAN | wait " + String(remainingSeconds) + " s");
+}
+
+void DisplayDriver::showOfflineScreen() {
+    currentState = ScreenState::OFFLINE;
+    stateHoldUntil = millis() + 2500;
+    logStatus("OFFLINE - LOCKED | server unreachable, contact security");
+}
+
+void DisplayDriver::update() {
+    // Return to idle quietly; main.cpp re-shows the idle status on its next refresh.
+    if (stateHoldUntil > 0 && millis() >= stateHoldUntil) {
+        stateHoldUntil = 0;
+        currentState = ScreenState::IDLE;
+    }
+}
+
+void DisplayDriver::clear() {}
+
+#endif  // HAS_OLED

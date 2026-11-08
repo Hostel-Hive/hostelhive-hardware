@@ -76,6 +76,43 @@ def gate_decision(http_code: int, outcome=None, error_code=None):
 
 
 # ============================================================================
+# 4. RFID card layout (Mirrors cardfmt in card_format.h, NodeMCU build)
+# ============================================================================
+CARD_MAGIC = b"HHC1"
+CARD_VERSION = 1
+
+
+def crc8(data: bytes) -> int:
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+
+def card_encode(payload: str):
+    if not QR_PATTERN.fullmatch(payload or ""):
+        return None
+    token = bytes.fromhex(payload[4:])
+    header = CARD_MAGIC + bytes([CARD_VERSION, crc8(token)]) + bytes(10)
+    return header + token  # blocks 4, 5, 6
+
+
+def card_decode(data: bytes):
+    if data[:4] != CARD_MAGIC:
+        return "NOT_HOSTELHIVE", None
+    token = data[16:48]
+    if data[4] != CARD_VERSION or any(data[6:16]) or data[5] != crc8(token):
+        return "CORRUPT", None
+    return "OK", "HH1:" + token.hex()
+
+
+def is_sector_trailer(block: int) -> bool:
+    return block % 4 == 3 if block < 128 else block % 16 == 15
+
+
+# ============================================================================
 # Test Cases
 # ============================================================================
 
@@ -177,12 +214,48 @@ class TestApiContractConformance(unittest.TestCase):
         self.assertTrue(QrParser.parse_payload(decoded["qr"])["is_valid"])
 
 
+class TestRfidCardFormat(unittest.TestCase):
+    """The card carries the backend-issued pass; damaged or foreign cards never decode."""
+
+    PASS = "HH1:" + "0123456789abcdef" * 4
+
+    def test_round_trip(self):
+        data = card_encode(self.PASS)
+        self.assertEqual(len(data), 48)
+        self.assertEqual(card_decode(data), ("OK", self.PASS))
+
+    def test_encode_rejects_non_passes(self):
+        for raw in ["", "HH-STU-2021-CS-045", self.PASS.upper(), self.PASS[:-1]]:
+            self.assertIsNone(card_encode(raw), raw)
+
+    def test_blank_cards_not_hostelhive(self):
+        self.assertEqual(card_decode(bytes(48))[0], "NOT_HOSTELHIVE")
+        self.assertEqual(card_decode(b"\xff" * 48)[0], "NOT_HOSTELHIVE")
+
+    def test_tampered_or_half_written_card_corrupt(self):
+        data = bytearray(card_encode(self.PASS))
+        data[30] ^= 1
+        self.assertEqual(card_decode(bytes(data))[0], "CORRUPT")
+        half = card_encode(self.PASS)[:32] + bytes(16)
+        self.assertEqual(card_decode(half)[0], "CORRUPT")
+
+    def test_crc8_check_value(self):
+        self.assertEqual(crc8(b"123456789"), 0xF4)  # CRC-8/SMBUS
+
+    def test_data_blocks_avoid_sector_trailers(self):
+        for block in (4, 5, 6):
+            self.assertFalse(is_sector_trailer(block))
+        for block in (3, 7, 63, 143):
+            self.assertTrue(is_sector_trailer(block))
+
+
 if __name__ == "__main__":
     print("==================================================================")
     print("  HostelHive Hardware & IoT Automated Test Suite (SENG 34213)   ")
     print("==================================================================")
     suite = unittest.TestSuite()
-    for tc in [TestQrScannerParsing, TestScanCooldownDeduplication, TestFailClosedGateDecision, TestApiContractConformance]:
+    for tc in [TestQrScannerParsing, TestScanCooldownDeduplication, TestFailClosedGateDecision, TestApiContractConformance,
+               TestRfidCardFormat]:
         suite.addTests(unittest.TestLoader().loadTestsFromTestCase(tc))
 
     runner = unittest.TextTestRunner(verbosity=2)

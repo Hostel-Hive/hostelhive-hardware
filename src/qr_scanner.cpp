@@ -5,7 +5,12 @@
 QrScanner qrScanner;
 
 QrScanner::QrScanner()
-    : scannerSerial(&Serial2), cooldownCount(0) {
+    : cooldownCount(0) {
+#if HAS_QR_UART
+    scannerSerial = &Serial2;
+#else
+    scannerSerial = nullptr;
+#endif
     for (int i = 0; i < MAX_COOLDOWN_ENTRIES; i++) {
         cooldownBuffer[i].qrPayload = "";
         cooldownBuffer[i].timestampMillis = 0;
@@ -13,15 +18,21 @@ QrScanner::QrScanner()
 }
 
 void QrScanner::init() {
+#if HAS_QR_UART
     Serial2.begin(SCANNER_BAUD_RATE, SERIAL_8N1, PIN_SCANNER_RX, PIN_SCANNER_TX);
     Serial.println("[SCANNER] QR Scanner UART initialized on GPIO 16 (RX) / 17 (TX).");
+#endif
 #if SIMULATION_MODE
-    Serial.println("[SCANNER] Simulation Mode Active: Also accepting QR input via USB Serial console.");
+    Serial.println("[SCANNER] Simulation Mode Active: Also accepting HH1 passes via USB Serial console.");
 #endif
 }
 
 bool QrScanner::hasData() {
+#if HAS_QR_UART
     bool hardwareAvailable = Serial2.available() > 0;
+#else
+    bool hardwareAvailable = false;
+#endif
 #if SIMULATION_MODE
     bool consoleAvailable = Serial.available() > 0;
     return hardwareAvailable || consoleAvailable;
@@ -30,6 +41,7 @@ bool QrScanner::hasData() {
 #endif
 }
 
+#if HAS_QR_UART || SIMULATION_MODE
 // Reads one line, capped at MAX_SCANNER_LINE_LENGTH so a malicious or faulty
 // scanner cannot exhaust heap. Over-long lines are drained and returned empty.
 static String readBoundedLine(Stream& in) {
@@ -53,11 +65,14 @@ static String readBoundedLine(Stream& in) {
     line.trim();
     return line;
 }
+#endif
 
 String QrScanner::readRawPayload() {
+#if HAS_QR_UART
     if (Serial2.available() > 0) {
         return readBoundedLine(Serial2);
     }
+#endif
 #if SIMULATION_MODE
     if (Serial.available() > 0) {
         return readBoundedLine(Serial);

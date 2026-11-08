@@ -9,7 +9,13 @@ static const char* OVERRIDE_LOG_ROTATED_PATH = "/override_log.1.jsonl";
 OverrideLog::OverrideLog() : mounted(false), sequence(0) {}
 
 bool OverrideLog::init() {
-    if (!LittleFS.begin(true)) {
+#if defined(ESP8266)
+    // ESP8266 LittleFS.begin() has no format-on-fail flag: format once by hand.
+    bool ok = LittleFS.begin() || (LittleFS.format() && LittleFS.begin());
+#else
+    bool ok = LittleFS.begin(true);
+#endif
+    if (!ok) {
         Serial.println("[AUDIT] LittleFS mount failed; overrides will only be logged to serial.");
         mounted = false;
         return false;

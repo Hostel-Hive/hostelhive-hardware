@@ -48,6 +48,26 @@ The **HostelHive IoT Node** is an automated gate-mounted edge device engineered 
 | **QR Scanner (TX)** | `GPIO 17` (TX2) | `OUTPUT` | 3.3V UART | Scanner configuration commands |
 | **Manual Override** | `GPIO 34` | `INPUT` + **external 10k pull-up to 3.3V** | Active LOW | Staff button, hold 1 s to unlock (logged). GPIO 34 has no internal pull-up; without the resistor the floating pin can open the gate. |
 
+### NodeMCU V3 + RC522 RFID variant
+
+The same firmware also builds for a **NodeMCU V3 (ESP8266)** with an **RC522 RFID reader** (`nodemcu` environment). Instead of scanning a QR code, students tap a MIFARE Classic card that stores their HostelHive pass. The gate reads the pass from the card and sends it to the backend exactly as a QR scan, so the backend, the fail-closed rules and the cooldown are unchanged. The card UID is never used to identify a student, because UIDs are easy to clone.
+
+This board has no OLED or external LEDs: status is printed to the serial monitor as `[GATE] ...` lines, the onboard LED lights on success, and the onboard FLASH button is the manual override. Wiring is in `docs/pinout_mapping.md`.
+
+**Build and upload**
+```bash
+pio run -e nodemcu --target upload
+pio device monitor --speed 115200
+```
+`include/secrets.h` needs your real Wi-Fi (2.4 GHz) and the HTTPS backend. The ESP8266 checks the backend certificate's dates, so the gate stays locked until it has the time from NTP. `nodemcu_dev` additionally accepts passes typed into the serial monitor and allows `http://` to a LAN backend when `ALLOW_INSECURE_HTTP` is 1.
+
+**Writing a pass to a card** (serial monitor, 115200 baud, "Newline")
+1. Get the student's pass text: decode the QR from `GET /api/v1/students/{id}/qr` (it reads `HH1:` + 64 hex characters).
+2. Send `provision HH1:<64 hex>` and tap a blank MIFARE Classic card within 20 s.
+3. The gate writes sector 1 blocks 4 to 6, reads them back, and prints `Pass written to card ... and verified`.
+
+Other commands: `wipe` (erase the HostelHive data from the next card), `cancel`, `rfid` (reader status), `overrides`. Only cards with the factory key (`FF FF FF FF FF FF`) can be written. A card holds the same pass as the student's QR code, so treat a lost card like a leaked QR code.
+
 ---
 
 ## 3. Interactive Wokwi Simulation (Hardware-Free Testing)

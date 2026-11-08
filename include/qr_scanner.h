@@ -35,7 +35,7 @@ public:
     void registerScan(const String& qrPayload);
 
 protected:
-    HardwareSerial* scannerSerial;
+    HardwareSerial* scannerSerial;  // nullptr on boards without a QR scanner UART
     CooldownEntry cooldownBuffer[MAX_COOLDOWN_ENTRIES];
     int cooldownCount;
 };
