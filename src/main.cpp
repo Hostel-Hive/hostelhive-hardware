@@ -8,6 +8,7 @@
 #include "api_client.h"
 #include "override_log.h"
 #include "gate_policy.h"
+#include "rfid_reader.h"
 
 // Credentials live only in the git-ignored secrets.h. There is deliberately no
 // fallback to the example file: a gate must never boot with a public key.
@@ -33,6 +34,12 @@ void showIdle() {
         displayDriver.showAccessDenied(apiClient.provisioningError());
         return;
     }
+#if HAS_RFID
+    if (!rfidReader.isReaderOk()) {
+        displayDriver.showAccessDenied("RFID READER NOT RESPONDING");
+        return;
+    }
+#endif
     displayDriver.showIdleScreen(networkManager.getLocalIp(), networkManager.isConnected(), overrideLog.totalCount());
 }
 
@@ -126,12 +133,89 @@ void processIncomingScan(const String& rawData) {
     denyScan(gate::denialMessage(response.decision));
 }
 
-// Maintenance command over USB serial: "overrides" prints the override log.
+#if HAS_RFID
+// One card per loop: a pass goes through the same path as a QR scan.
+void pollRfid() {
+    CardRead card = rfidReader.poll();
+    switch (card.status) {
+        case CardStatus::NONE:
+            return;
+        case CardStatus::PASS:
+            Serial.printf("[RFID] Card %s carries pass %s\n", card.uid.c_str(), QrScanner::redact(card.payload).c_str());
+            processIncomingScan(card.payload);
+            return;
+        case CardStatus::NOT_REGISTERED:
+            denyScan("CARD NOT REGISTERED");
+            return;
+        case CardStatus::CORRUPT:
+            denyScan("CARD DATA DAMAGED");
+            return;
+        case CardStatus::UNSUPPORTED:
+            denyScan("UNSUPPORTED CARD");
+            return;
+        case CardStatus::READ_ERROR:
+            denyScan("READ ERROR - TAP AGAIN");
+            return;
+        case CardStatus::PROVISION_OK:
+            Serial.printf("[RFID] Pass written to card %s and verified.\n", card.uid.c_str());
+            feedbackController.triggerFeedback(FeedbackType::SUCCESS_GRANTED);
+            return;
+        case CardStatus::WIPE_OK:
+            Serial.printf("[RFID] HostelHive data erased from card %s.\n", card.uid.c_str());
+            feedbackController.triggerFeedback(FeedbackType::SUCCESS_GRANTED);
+            return;
+        case CardStatus::PROVISION_FAILED:
+            Serial.println("[RFID] Write failed; still waiting. Tap the card again, or send \"cancel\".");
+            feedbackController.triggerFeedback(FeedbackType::ACCESS_DENIED);
+            return;
+        case CardStatus::PROVISION_TIMEOUT:
+            Serial.println("[RFID] No card tapped in time; write cancelled.");
+            feedbackController.triggerFeedback(FeedbackType::ERROR_ALERT);
+            return;
+    }
+}
+#endif
+
+// Maintenance commands over USB serial:
+//   overrides            print the manual-override log
+//   provision HH1:<hex>  write a student's pass to the next tapped card (NodeMCU)
+//   wipe                 erase HostelHive data from the next tapped card (NodeMCU)
+//   cancel               abandon a pending provision/wipe
+//   rfid                 RC522 status
 bool handleSerialCommand(const String& line) {
     if (line == "overrides") {
         overrideLog.dump(Serial);
         return true;
     }
+#if HAS_RFID
+    if (line.startsWith("provision")) {
+        String pass = line.substring(9);
+        pass.trim();
+        if (!rfidReader.armProvision(pass)) {
+            Serial.println("[RFID] Usage: provision HH1:<64 lowercase hex> (the student's QR pass text).");
+            return true;
+        }
+        Serial.printf("[RFID] Tap the card to write %s (%d s)...\n", QrScanner::redact(pass).c_str(),
+                      RFID_PROVISION_TIMEOUT_MS / 1000);
+        return true;
+    }
+    if (line == "wipe") {
+        rfidReader.armWipe();
+        Serial.printf("[RFID] Tap the card to erase its HostelHive data (%d s)...\n", RFID_PROVISION_TIMEOUT_MS / 1000);
+        return true;
+    }
+    if (line == "cancel") {
+        bool wasArmed = rfidReader.isArmed();
+        rfidReader.cancel();
+        Serial.println(wasArmed ? "[RFID] Pending card write cancelled." : "[RFID] Nothing to cancel.");
+        return true;
+    }
+    if (line == "rfid") {
+        Serial.printf("[RFID] RC522 %s (firmware 0x%02X)%s\n", rfidReader.isReaderOk() ? "OK" : "NOT RESPONDING",
+                      rfidReader.firmwareVersion(), rfidReader.isArmed() ? ", waiting for a card to write" : "");
+        return true;
+    }
+#endif
     return false;
 }
 
@@ -142,6 +226,7 @@ void setup() {
     Serial.println("\n=======================================================");
     Serial.println("  HOSTELHIVE IoT ATTENDANCE NODE FIRMWARE");
     Serial.printf("  Version: %s | Node: %s | Mode: %s\n", HOSTELHIVE_FIRMWARE_VERSION, NODE_ID, GATE_DIRECTION);
+    Serial.printf("  Board: %s\n", HH_BOARD_NAME);
     Serial.printf("  Built: %s %s\n", __DATE__, __TIME__);
     Serial.println("=======================================================");
 
@@ -150,15 +235,17 @@ void setup() {
     feedbackController.init();
     displayDriver.init();
     qrScanner.init();
+#if HAS_RFID
+    rfidReader.init();
+#endif
     overrideLog.init();
 
-    // Requires an external pull-up on GPIO 34 (see config.h).
-    pinMode(PIN_BUTTON_OVERRIDE, INPUT);
+    // ESP32: GPIO 34 needs an external pull-up. NodeMCU: onboard FLASH button (see config.h).
+    pinMode(PIN_BUTTON_OVERRIDE, OVERRIDE_PIN_MODE);
 
     networkManager.init(WIFI_SSID, WIFI_PASSWORD);
-    if (networkManager.isConnected()) {
-        networkManager.initTimeSync(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
-    }
+    // Starts SNTP even when Wi-Fi comes up later (ESP8266 needs the clock for TLS).
+    networkManager.initTimeSync(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
     if (apiClient.init(API_BASE_URL, API_ROOT_CA, DEVICE_CREDENTIAL, ALLOW_INSECURE_HTTP != 0) &&
         networkManager.isConnected()) {
         unsigned long checkStart = millis();
@@ -182,6 +269,9 @@ void loop() {
     pollOverrideButton();
 
     // 3. Scan input detection
+#if HAS_RFID
+    pollRfid();
+#endif
     if (qrScanner.hasData()) {
         String rawData = qrScanner.readRawPayload();
         if (rawData.length() > 0 && !handleSerialCommand(rawData)) {

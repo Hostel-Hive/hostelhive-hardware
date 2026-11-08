@@ -20,19 +20,64 @@
 // scanner device (PUT /api/v1/scanner-devices/{deviceID}/direction).
 #define GATE_DIRECTION "IN"
 
+#define GATE_UNLOCK_DURATION_MS 3000  // Solenoid held open for 3 seconds
+// The override button must be held continuously this long to unlock (noise/bounce guard).
+#define OVERRIDE_HOLD_MS 1000
+
+#if defined(ESP8266)
+// ==========================================
+// Pinout Definitions (NodeMCU V3 / ESP-12E "ESP8266MOD")
+// Scans come from an RC522 RFID reader; the card carries the student's HH1 pass.
+// No OLED or external LEDs: status goes to the USB serial log and the onboard LED.
+// ==========================================
+#define HH_BOARD_NAME "NodeMCU V3 (ESP8266)"
+#define HAS_RFID 1
+#define HAS_QR_UART 0
+#ifndef HAS_OLED
+#define HAS_OLED 0
+#endif
+
+// RC522 on hardware SPI: SCK=D5 (GPIO14), MISO=D6 (GPIO12), MOSI=D7 (GPIO13)
+#define PIN_RFID_SS 15   // D8
+#define PIN_RFID_RST 5   // D1
+
+// Onboard LED (GPIO2 / D4) is the only status light; it is lit by driving LOW.
+#define PIN_LED_GREEN 2
+#define PIN_LED_RED -1
+#define LED_ACTIVE_LEVEL LOW
+
+// Passive piezo buzzer (+ through ~100 ohm to D2, - to GND). GPIO4 stays LOW at boot.
+#define PIN_BUZZER 4     // D2
+
+// Relay IN on D0 (GPIO16). GPIO16 is HIGH during boot, so use an active-LOW
+// relay module: the lock then stays shut while the board resets.
+#define PIN_RELAY_LOCK 16  // D0
+#define RELAY_ACTIVE_LEVEL LOW
+
+// Manual override: the onboard FLASH button (GPIO0 / D3), which already has a
+// pull-up. Do not hold it while powering on, or the board enters flash mode.
+#define PIN_BUTTON_OVERRIDE 0
+#define OVERRIDE_PIN_MODE INPUT_PULLUP
+
+#else
 // ==========================================
 // Pinout Definitions (ESP32-WROOM-32)
 // ==========================================
+#define HH_BOARD_NAME "ESP32-WROOM-32"
+#define HAS_RFID 0
+#define HAS_QR_UART 1
+#ifndef HAS_OLED
+#define HAS_OLED 1
+#endif
+
 // I2C Pins for SSD1306 OLED (128x64)
 #define PIN_OLED_SDA 21
 #define PIN_OLED_SCL 22
-#define OLED_SCREEN_WIDTH 128
-#define OLED_SCREEN_HEIGHT 64
-#define OLED_RESET_PIN -1
 
 // Visual Status Indicators
 #define PIN_LED_GREEN 18
 #define PIN_LED_RED 19
+#define LED_ACTIVE_LEVEL HIGH
 
 // Auditory Feedback (Piezo Buzzer)
 #define PIN_BUZZER 23
@@ -41,7 +86,6 @@
 // Gate Actuator (Relay / Solenoid Lock)
 #define PIN_RELAY_LOCK 27
 #define RELAY_ACTIVE_LEVEL HIGH
-#define GATE_UNLOCK_DURATION_MS 3000  // Solenoid held open for 3 seconds
 
 // QR Scanner Serial Interface (UART2)
 #define PIN_SCANNER_RX 16
@@ -52,8 +96,18 @@
 // GPIO 34 is input-only and has NO internal pull-up: wire an external 10k
 // pull-up to 3.3V, otherwise the floating pin reads LOW and opens the gate.
 #define PIN_BUTTON_OVERRIDE 34
-// The button must be held continuously this long to unlock (noise/bounce guard).
-#define OVERRIDE_HOLD_MS 1000
+#define OVERRIDE_PIN_MODE INPUT
+#endif
+
+#define OLED_SCREEN_WIDTH 128
+#define OLED_SCREEN_HEIGHT 64
+#define OLED_RESET_PIN -1
+
+// RFID card handling (NodeMCU build)
+// How long "provision"/"wipe" waits for a card before giving up.
+#define RFID_PROVISION_TIMEOUT_MS 20000
+// The RC522 is re-checked (and re-initialised if it stopped answering) this often.
+#define RFID_HEALTH_CHECK_MS 30000
 
 // ==========================================
 // Timing & Business Rule Constraints (SRS)

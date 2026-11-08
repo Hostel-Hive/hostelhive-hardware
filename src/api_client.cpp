@@ -1,11 +1,29 @@
 #include "api_client.h"
 #include "config.h"
+#if defined(ESP8266)
+#include <time.h>
+#else
 #include <esp_system.h>
+#endif
 
 ApiClient apiClient;
 
 ApiClient::ApiClient()
-    : baseUrl(""), rootCa(nullptr), authorization(""), insecure(false), provisioned(false), setupError("not initialized") {}
+    : baseUrl(""), rootCa(nullptr), authorization(""), insecure(false), provisioned(false), setupError("not initialized")
+#if defined(ESP8266)
+      , trustAnchors(nullptr)
+#endif
+{
+}
+
+// Hardware RNG bytes for the per-scan event ID.
+static void fillRandom(uint8_t* out, size_t len) {
+#if defined(ESP8266)
+    ESP.random(out, len);
+#else
+    esp_fill_random(out, len);
+#endif
+}
 
 bool ApiClient::init(const char* url, const char* rootCaPem, const char* deviceCredential, bool allowInsecureHttp) {
     provisioned = false;
@@ -37,7 +55,19 @@ bool ApiClient::init(const char* url, const char* rootCaPem, const char* deviceC
     rootCa = rootCaPem;
     authorization = String("Bearer ") + deviceCredential;
     if (!insecure) {
+#if defined(ESP8266)
+        delete trustAnchors;
+        trustAnchors = new BearSSL::X509List(rootCa);
+        if (trustAnchors->getCount() == 0) {
+            provisioned = false;
+            setupError = "API_ROOT_CA unreadable";
+            Serial.println("[API] Gate locked: API_ROOT_CA could not be parsed.");
+            return false;
+        }
+        tlsClient.setTrustAnchors(trustAnchors);
+#else
         tlsClient.setCACert(rootCa);
+#endif
     } else {
         Serial.println("[API] WARNING: insecure HTTP enabled (simulation only).");
     }
@@ -51,7 +81,16 @@ bool ApiClient::init(const char* url, const char* rootCaPem, const char* deviceC
 bool ApiClient::beginRequest(HTTPClient& http, const char* path) {
     String url = baseUrl + path;
     http.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
+#if defined(ESP8266)
+    // BearSSL checks certificate dates against this; before SNTP has set the
+    // clock the handshake fails and the gate stays locked.
+    if (!insecure) {
+        tlsClient.setX509Time(time(nullptr));
+        tlsClient.setTimeout(HTTP_REQUEST_TIMEOUT_MS);
+    }
+#else
     http.setConnectTimeout(HTTP_REQUEST_TIMEOUT_MS);
+#endif
     // Redirects could leak the Authorization header to another host.
     http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
     http.setReuse(false);
@@ -83,7 +122,7 @@ ScanResponse ApiClient::submitScan(const String& qrPayload) {
     // One event ID per physical scan. The backend treats a repeated ID with the
     // same QR as a retry and returns the original result, so one retry is safe.
     uint8_t random[16];
-    esp_fill_random(random, sizeof(random));
+    fillRandom(random, sizeof(random));
     char eventId[37];
     gate::formatUuidV4(random, eventId);
 

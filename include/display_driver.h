@@ -3,9 +3,16 @@
 #define HOSTELHIVE_DISPLAY_DRIVER_H
 
 #include <Arduino.h>
+#include "config.h"
+
+#if HAS_OLED
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#endif
+
+// With HAS_OLED 0 (NodeMCU build) the same screens are written as one-line
+// "[GATE] ..." status messages on the USB serial log instead.
 
 enum class ScreenState {
     BOOT,
@@ -36,7 +43,13 @@ public:
     ScreenState getCurrentState() const { return currentState; }
 
 protected:
+#if HAS_OLED
     Adafruit_SSD1306 display;
+#else
+    void logStatus(const String& line);
+    String lastLine;
+    unsigned long lastLineAt;
+#endif
     bool isAvailable;
     ScreenState currentState;
     unsigned long stateHoldUntil;
