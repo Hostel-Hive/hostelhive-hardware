@@ -22,6 +22,8 @@ public:
     // FR012: Exact timestamp logging
     void initTimeSync(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer);
     bool isTimeSynced() const;
+    // True once SNTP has set a plausible date (needed for TLS certificate checks).
+    bool hasValidClock() const;
     String getIsoTimestamp();
 
 private:

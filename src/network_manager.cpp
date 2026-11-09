@@ -98,6 +98,10 @@ bool NetworkManager::isTimeSynced() const {
     return timeSynced;
 }
 
+bool NetworkManager::hasValidClock() const {
+    return time(nullptr) > 1672531200;  // after 2023-01-01
+}
+
 String NetworkManager::getIsoTimestamp() {
     struct tm timeinfo;
     if (readLocalTime(&timeinfo, 100)) {

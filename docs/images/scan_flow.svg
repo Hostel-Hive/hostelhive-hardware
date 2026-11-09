@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 330" width="960" height="330" font-family="'Segoe UI', Arial, sans-serif">
+  <title>How a HostelHive gate scan works</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#89b4fa"/>
+    </marker>
+    <marker id="arrowOk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a6e3a1"/>
+    </marker>
+    <marker id="arrowNo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f38ba8"/>
+    </marker>
+  </defs>
+  <rect width="960" height="330" rx="12" fill="#1e1e2e"/>
+  <text x="32" y="42" font-size="20" font-weight="700" fill="#cdd6f4">How a scan works</text>
+
+  <!-- 1. Student -->
+  <rect x="32" y="80" width="190" height="120" rx="10" fill="#2a2b3d" stroke="#89b4fa" stroke-width="2"/>
+  <text x="127" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#89b4fa">1 · Student</text>
+  <text x="127" y="134" text-anchor="middle" font-size="12" fill="#cdd6f4">taps RFID card</text>
+  <text x="127" y="152" text-anchor="middle" font-size="12" fill="#a6adc8">or shows QR code</text>
+  <text x="127" y="180" text-anchor="middle" font-family="Consolas, monospace" font-size="11" fill="#fab387">HH1:&lt;64 hex&gt;</text>
+
+  <!-- 2. Gate -->
+  <rect x="270" y="80" width="200" height="120" rx="10" fill="#181825" stroke="#cba6f7" stroke-width="2.5"/>
+  <text x="370" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#cba6f7">2 · Gate node</text>
+  <text x="370" y="134" text-anchor="middle" font-size="12" fill="#cdd6f4">reads + validates pass</text>
+  <text x="370" y="152" text-anchor="middle" font-size="12" fill="#cdd6f4">15 s duplicate cooldown</text>
+  <text x="370" y="180" text-anchor="middle" font-size="11" fill="#a6adc8">NodeMCU or ESP32</text>
+
+  <!-- 3. Backend -->
+  <rect x="518" y="80" width="200" height="120" rx="10" fill="#2a2b3d" stroke="#89dceb" stroke-width="2"/>
+  <text x="618" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#89dceb">3 · Backend</text>
+  <text x="618" y="134" text-anchor="middle" font-size="12" fill="#cdd6f4">checks the student</text>
+  <text x="618" y="152" text-anchor="middle" font-size="12" fill="#cdd6f4">records IN / OUT</text>
+  <text x="618" y="180" text-anchor="middle" font-family="Consolas, monospace" font-size="10.5" fill="#fab387">POST /device/scans</text>
+
+  <!-- 4. Results -->
+  <rect x="766" y="70" width="162" height="62" rx="10" fill="#2a2b3d" stroke="#a6e3a1" stroke-width="2"/>
+  <text x="847" y="96" text-anchor="middle" font-size="13" font-weight="700" fill="#a6e3a1">Gate opens</text>
+  <text x="847" y="116" text-anchor="middle" font-size="11" fill="#cdd6f4">relay 3 s · high chirp</text>
+  <rect x="766" y="148" width="162" height="62" rx="10" fill="#2a2b3d" stroke="#f38ba8" stroke-width="2"/>
+  <text x="847" y="174" text-anchor="middle" font-size="13" font-weight="700" fill="#f38ba8">Stays locked</text>
+  <text x="847" y="194" text-anchor="middle" font-size="11" fill="#cdd6f4">low buzz · reason logged</text>
+
+  <!-- arrows -->
+  <line x1="222" y1="140" x2="266" y2="140" stroke="#89b4fa" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <line x1="470" y1="130" x2="514" y2="130" stroke="#89b4fa" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="492" y="122" text-anchor="middle" font-size="10" fill="#a6adc8">HTTPS</text>
+  <line x1="514" y1="152" x2="474" y2="152" stroke="#89b4fa" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <polyline points="718,120 742,120 742,101 762,101" fill="none" stroke="#a6e3a1" stroke-width="2.5" marker-end="url(#arrowOk)"/>
+  <text x="742" y="92" text-anchor="middle" font-size="10" fill="#a6e3a1">200</text>
+  <polyline points="718,160 742,160 742,179 762,179" fill="none" stroke="#f38ba8" stroke-width="2.5" marker-end="url(#arrowNo)"/>
+  <text x="742" y="198" text-anchor="middle" font-size="10" fill="#f38ba8">else</text>
+
+  <!-- fail-closed note -->
+  <rect x="32" y="232" width="896" height="72" rx="10" fill="#181825" stroke="#45475a"/>
+  <text x="52" y="260" font-size="13" font-weight="700" fill="#f9e2af">Fails closed</text>
+  <text x="52" y="282" font-size="12" fill="#cdd6f4">No Wi-Fi, a timeout, an error or an unexpected answer keeps the gate locked. Nothing is queued for later.</text>
+  <text x="52" y="298" font-size="12" fill="#a6adc8">Staff can still open it with the manual override, and every use is logged on the device.</text>
+</svg>

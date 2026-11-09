@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640" font-family="'Segoe UI', Arial, sans-serif">
+  <title>HostelHive NodeMCU V3 RFID gate wiring</title>
+  <rect width="960" height="640" rx="12" fill="#1e1e2e"/>
+
+  <text x="32" y="44" font-size="21" font-weight="700" fill="#cdd6f4">NodeMCU V3 RFID Gate · Wiring</text>
+  <text x="32" y="68" font-size="13" fill="#a6adc8">Logical connections (not physical header order). The RC522 runs on 3.3 V only.</text>
+
+  <!-- ===== RC522 ===== -->
+  <rect x="48" y="110" width="200" height="420" rx="10" fill="#2a2b3d" stroke="#89b4fa" stroke-width="2"/>
+  <text x="148" y="140" text-anchor="middle" font-size="17" font-weight="700" fill="#89b4fa">RC522</text>
+  <text x="148" y="158" text-anchor="middle" font-size="11" fill="#a6adc8">13.56 MHz RFID reader</text>
+  <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387" text-anchor="end">
+    <text x="238" y="194">3.3V</text>
+    <text x="238" y="244">GND</text>
+    <text x="238" y="294">SDA</text>
+    <text x="238" y="344">SCK</text>
+    <text x="238" y="394">MOSI</text>
+    <text x="238" y="444">MISO</text>
+    <text x="238" y="494">RST</text>
+    <text x="238" y="519" fill="#6c7086">IRQ</text>
+  </g>
+  <text x="62" y="519" font-size="11" fill="#6c7086">not connected</text>
+
+  <!-- ===== NodeMCU ===== -->
+  <rect x="380" y="100" width="210" height="460" rx="12" fill="#181825" stroke="#cba6f7" stroke-width="3"/>
+  <text x="485" y="132" text-anchor="middle" font-size="18" font-weight="700" fill="#cba6f7">NodeMCU V3</text>
+  <text x="485" y="150" text-anchor="middle" font-size="11" fill="#a6adc8">ESP-12E · ESP8266 · CH340</text>
+  <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387">
+    <text x="392" y="194">3V</text>
+    <text x="392" y="244">G</text>
+    <text x="392" y="294">D8</text>
+    <text x="392" y="344">D5</text>
+    <text x="392" y="394">D7</text>
+    <text x="392" y="444">D6</text>
+    <text x="392" y="494">D1</text>
+  </g>
+  <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387" text-anchor="end">
+    <text x="578" y="214">D2</text>
+    <text x="578" y="274">G</text>
+    <text x="578" y="394">D0</text>
+    <text x="578" y="444">VIN</text>
+    <text x="578" y="494">G</text>
+  </g>
+  <!-- onboard parts -->
+  <rect x="432" y="300" width="106" height="150" rx="8" fill="#2a2b3d" stroke="#45475a"/>
+  <text x="485" y="320" text-anchor="middle" font-size="11" font-weight="700" fill="#cdd6f4">On the board</text>
+  <circle cx="446" cy="341" r="5" fill="#89b4fa"/>
+  <text x="456" y="345" font-size="10.5" fill="#cdd6f4">LED (D4)</text>
+  <text x="456" y="358" font-size="9.5" fill="#a6adc8">status</text>
+  <rect x="441" y="372" width="10" height="10" rx="2" fill="#a6adc8"/>
+  <text x="456" y="381" font-size="10.5" fill="#cdd6f4">FLASH (D3)</text>
+  <text x="456" y="394" font-size="9.5" fill="#a6adc8">hold 1 s = override</text>
+  <rect x="440" y="408" width="12" height="8" rx="1" fill="#6c7086"/>
+  <text x="456" y="417" font-size="10.5" fill="#cdd6f4">USB</text>
+  <text x="456" y="430" font-size="9.5" fill="#a6adc8">power + serial</text>
+
+  <!-- ===== RC522 wires ===== -->
+  <g fill="none" stroke-width="2.5">
+    <line x1="248" y1="190" x2="380" y2="190" stroke="#f38ba8"/>
+    <line x1="248" y1="240" x2="380" y2="240" stroke="#6c7086" stroke-dasharray="6 4"/>
+    <line x1="248" y1="290" x2="380" y2="290" stroke="#89dceb"/>
+    <line x1="248" y1="340" x2="380" y2="340" stroke="#89dceb"/>
+    <line x1="248" y1="390" x2="380" y2="390" stroke="#89dceb"/>
+    <line x1="248" y1="440" x2="380" y2="440" stroke="#89dceb"/>
+    <line x1="248" y1="490" x2="380" y2="490" stroke="#a6e3a1"/>
+  </g>
+  <g fill="#1e1e2e" stroke-width="2">
+    <circle cx="248" cy="190" r="4" stroke="#f38ba8"/><circle cx="380" cy="190" r="4" stroke="#f38ba8"/>
+    <circle cx="248" cy="240" r="4" stroke="#6c7086"/><circle cx="380" cy="240" r="4" stroke="#6c7086"/>
+    <circle cx="248" cy="290" r="4" stroke="#89dceb"/><circle cx="380" cy="290" r="4" stroke="#89dceb"/>
+    <circle cx="248" cy="340" r="4" stroke="#89dceb"/><circle cx="380" cy="340" r="4" stroke="#89dceb"/>
+    <circle cx="248" cy="390" r="4" stroke="#89dceb"/><circle cx="380" cy="390" r="4" stroke="#89dceb"/>
+    <circle cx="248" cy="440" r="4" stroke="#89dceb"/><circle cx="380" cy="440" r="4" stroke="#89dceb"/>
+    <circle cx="248" cy="490" r="4" stroke="#a6e3a1"/><circle cx="380" cy="490" r="4" stroke="#a6e3a1"/>
+  </g>
+  <text x="314" y="184" text-anchor="middle" font-size="10.5" fill="#f38ba8">3.3 V only</text>
+
+  <!-- ===== Buzzer ===== -->
+  <rect x="740" y="170" width="180" height="130" rx="10" fill="#2a2b3d" stroke="#f9e2af" stroke-width="2"/>
+  <text x="830" y="198" text-anchor="middle" font-size="16" font-weight="700" fill="#f9e2af">Buzzer</text>
+  <text x="830" y="215" text-anchor="middle" font-size="11" fill="#a6adc8">passive piezo</text>
+  <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387">
+    <text x="752" y="214">+</text>
+    <text x="752" y="274">−</text>
+  </g>
+  <!-- D2 -> resistor -> + -->
+  <polyline points="590,210 630,210 636,200 648,220 660,200 672,220 684,200 690,210 740,210" fill="none" stroke="#f9e2af" stroke-width="2.5"/>
+  <text x="660" y="196" text-anchor="middle" font-size="11" fill="#f9e2af">≈100 Ω</text>
+  <line x1="590" y1="270" x2="740" y2="270" stroke="#6c7086" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <circle cx="590" cy="210" r="4" fill="#1e1e2e" stroke="#f9e2af" stroke-width="2"/>
+  <circle cx="590" cy="270" r="4" fill="#1e1e2e" stroke="#6c7086" stroke-width="2"/>
+
+  <!-- ===== Relay ===== -->
+  <rect x="740" y="350" width="180" height="170" rx="10" fill="#2a2b3d" stroke="#f38ba8" stroke-width="2" stroke-dasharray="8 4"/>
+  <text x="830" y="374" text-anchor="middle" font-size="16" font-weight="700" fill="#f38ba8">Relay (optional)</text>
+  <text x="830" y="391" text-anchor="middle" font-size="11" fill="#a6adc8">5 V, active-LOW module</text>
+  <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387">
+    <text x="752" y="414">IN</text>
+    <text x="752" y="444">VCC</text>
+    <text x="752" y="494">GND</text>
+  </g>
+  <text x="830" y="512" text-anchor="middle" font-size="10.5" fill="#a6adc8">COM / NO → solenoid lock</text>
+  <polyline points="590,390 660,390 660,410 740,410" fill="none" stroke="#f9e2af" stroke-width="2.5"/>
+  <line x1="590" y1="440" x2="740" y2="440" stroke="#f38ba8" stroke-width="2.5"/>
+  <line x1="590" y1="490" x2="740" y2="490" stroke="#6c7086" stroke-width="2.5" stroke-dasharray="6 4"/>
+  <circle cx="590" cy="390" r="4" fill="#1e1e2e" stroke="#f9e2af" stroke-width="2"/>
+  <circle cx="590" cy="440" r="4" fill="#1e1e2e" stroke="#f38ba8" stroke-width="2"/>
+  <circle cx="590" cy="490" r="4" fill="#1e1e2e" stroke="#6c7086" stroke-width="2"/>
+  <text x="665" y="434" text-anchor="middle" font-size="10.5" fill="#f38ba8">5 V (USB)</text>
+
+  <!-- ===== Legend ===== -->
+  <g font-size="12" fill="#cdd6f4">
+    <line x1="48" y1="598" x2="78" y2="598" stroke="#f38ba8" stroke-width="3"/><text x="86" y="602">Power</text>
+    <line x1="150" y1="598" x2="180" y2="598" stroke="#6c7086" stroke-width="3" stroke-dasharray="6 4"/><text x="188" y="602">Ground</text>
+    <line x1="260" y1="598" x2="290" y2="598" stroke="#89dceb" stroke-width="3"/><text x="298" y="602">SPI data</text>
+    <line x1="380" y1="598" x2="410" y2="598" stroke="#a6e3a1" stroke-width="3"/><text x="418" y="602">Reset</text>
+    <line x1="480" y1="598" x2="510" y2="598" stroke="#f9e2af" stroke-width="3"/><text x="518" y="602">Control output</text>
+    <text x="912" y="602" text-anchor="end" fill="#6c7086">pins: include/config.h</text>
+  </g>
+</svg>

@@ -19,7 +19,7 @@
 
   <!-- Title -->
   <text x="30" y="45" class="title">HostelHive ESP32 IoT Attendance Scanner - Circuit Schematic</text>
-  <text x="30" y="70" class="label" fill="#a6adc8">Academic Reference: SENG 34213 | System Design Specification Section 7.2.2</text>
+  <text x="30" y="70" class="label" fill="#a6adc8">OLED, LEDs, buzzer, relay, QR scanner and override button</text>
 
   <!-- ESP32 Controller Block -->
   <rect x="330" y="120" width="240" height="420" class="esp-box"/>

@@ -27,6 +27,34 @@ unsigned long lastUiRefresh = 0;
 bool lastWifiStatus = false;
 unsigned long overridePressedSince = 0;
 bool overrideHandled = false;
+bool deviceCheckDone = false;
+unsigned long wifiUpSince = 0;
+
+// How long to wait for SNTP after Wi-Fi connects before checking anyway (and
+// most likely failing the certificate date check, which the log then shows).
+#define DEVICE_CHECK_CLOCK_WAIT_MS 30000
+
+// GET /api/v1/device/check once per boot, as soon as the network allows it.
+// Diagnostic only: it confirms Wi-Fi, TLS and the credential work end to end
+// before the first student taps. The gate's decisions never depend on it.
+void maybeCheckDevice() {
+    if (deviceCheckDone || !apiClient.isProvisioned()) return;
+    if (!networkManager.isConnected()) {
+        wifiUpSince = 0;
+        return;
+    }
+    if (wifiUpSince == 0) wifiUpSince = millis();
+#if defined(ESP8266)
+    // BearSSL validates the certificate dates, so it needs the real time first.
+    if (!networkManager.hasValidClock() && millis() - wifiUpSince < DEVICE_CHECK_CLOCK_WAIT_MS) return;
+    if (!networkManager.hasValidClock()) Serial.println("[API] Clock still not set by NTP; TLS will likely fail.");
+#endif
+    deviceCheckDone = true;
+    unsigned long checkStart = millis();
+    int check = apiClient.checkDevice();
+    Serial.printf("[API] Backend device check: HTTP %d%s after %lu ms (timeout %d ms)\n", check,
+                  check == 200 ? " (authenticated)" : "", millis() - checkStart, HTTP_REQUEST_TIMEOUT_MS);
+}
 
 void showIdle() {
     if (!apiClient.isProvisioned()) {
@@ -246,13 +274,9 @@ void setup() {
     networkManager.init(WIFI_SSID, WIFI_PASSWORD);
     // Starts SNTP even when Wi-Fi comes up later (ESP8266 needs the clock for TLS).
     networkManager.initTimeSync(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
-    if (apiClient.init(API_BASE_URL, API_ROOT_CA, DEVICE_CREDENTIAL, ALLOW_INSECURE_HTTP != 0) &&
-        networkManager.isConnected()) {
-        unsigned long checkStart = millis();
-        int check = apiClient.checkDevice();
-        Serial.printf("[SETUP] Backend device check: HTTP %d%s after %lu ms (timeout %d ms)\n", check,
-                      check == 200 ? " (authenticated)" : "", millis() - checkStart, HTTP_REQUEST_TIMEOUT_MS);
-    }
+    apiClient.init(API_BASE_URL, API_ROOT_CA, DEVICE_CREDENTIAL, ALLOW_INSECURE_HTTP != 0);
+    // Runs now if Wi-Fi is already up, otherwise from loop() once it connects.
+    maybeCheckDevice();
 
     Serial.println("[SETUP] Initialization completed. Ready for scans.\n");
     showIdle();
@@ -265,10 +289,13 @@ void loop() {
     displayDriver.update();
     networkManager.update();
 
-    // 2. Manual override button (held, debounced, logged)
+    // 2. One-time backend login check, once Wi-Fi (and on ESP8266 the clock) is ready
+    maybeCheckDevice();
+
+    // 3. Manual override button (held, debounced, logged)
     pollOverrideButton();
 
-    // 3. Scan input detection
+    // 4. Scan input detection
 #if HAS_RFID
     pollRfid();
 #endif
@@ -287,7 +314,7 @@ void loop() {
     }
 #endif
 
-    // 4. Periodic UI status refresh when idle
+    // 5. Periodic UI status refresh when idle
     bool currentWifi = networkManager.isConnected();
     if (displayDriver.getCurrentState() == ScreenState::IDLE) {
         if (millis() - lastUiRefresh >= 5000 || currentWifi != lastWifiStatus) {

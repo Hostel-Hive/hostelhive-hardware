@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" width="960" height="220" font-family="'Segoe UI', Arial, sans-serif">
+  <title>HostelHive Gate Node</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e1e2e"/>
+      <stop offset="1" stop-color="#2a1f45"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="220" rx="16" fill="url(#bg)"/>
+
+  <!-- card + signal icon -->
+  <g transform="translate(70,52)">
+    <rect x="0" y="22" width="150" height="96" rx="12" fill="#2a2b3d" stroke="#cba6f7" stroke-width="3"/>
+    <rect x="16" y="44" width="30" height="24" rx="4" fill="#f9e2af"/>
+    <rect x="16" y="86" width="90" height="8" rx="4" fill="#45475a"/>
+    <rect x="16" y="100" width="60" height="8" rx="4" fill="#45475a"/>
+    <g fill="none" stroke="#89dceb" stroke-width="5" stroke-linecap="round">
+      <path d="M118 52 a14 14 0 0 1 0 22"/>
+      <path d="M128 42 a28 28 0 0 1 0 42"/>
+      <path d="M138 32 a42 42 0 0 1 0 62"/>
+    </g>
+  </g>
+
+  <text x="270" y="98" font-size="44" font-weight="800" fill="#cdd6f4">HostelHive <tspan fill="#cba6f7">Gate Node</tspan></text>
+  <text x="272" y="136" font-size="18" fill="#a6adc8">Hostel entry &amp; exit scanner firmware for ESP8266 and ESP32</text>
+  <text x="272" y="168" font-size="15" fill="#89dceb">RFID cards · QR passes · HTTPS · fail-closed gate control</text>
+</svg>
