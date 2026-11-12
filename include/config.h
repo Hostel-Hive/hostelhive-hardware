@@ -20,7 +20,12 @@
 // scanner device (PUT /api/v1/scanner-devices/{deviceID}/direction).
 #define GATE_DIRECTION "IN"
 
+#if defined(ESP8266)
+// NodeMCU gate: lock held open 5 s; the reader also pauses for these 5 s.
+#define GATE_UNLOCK_DURATION_MS 5000
+#else
 #define GATE_UNLOCK_DURATION_MS 3000  // Solenoid held open for 3 seconds
+#endif
 // The override button must be held continuously this long to unlock (noise/bounce guard).
 #define OVERRIDE_HOLD_MS 1000
 
@@ -46,8 +51,13 @@
 #define PIN_LED_RED -1
 #define LED_ACTIVE_LEVEL LOW
 
-// Passive piezo buzzer (+ through ~100 ohm to D2, - to GND). GPIO4 stays LOW at boot.
+// Buzzer + to D2, - to GND. GPIO4 stays LOW at boot, so it is silent while resetting.
 #define PIN_BUZZER 4     // D2
+// 1 = active buzzer (has its own oscillator, e.g. TMB12A12 / TMB12A05): D2 is
+//     simply switched on and off. 0 = passive piezo, driven with tone().
+#ifndef BUZZER_ACTIVE
+#define BUZZER_ACTIVE 1
+#endif
 
 // Relay IN on D0 (GPIO16). GPIO16 is HIGH during boot, so use an active-LOW
 // relay module: the lock then stays shut while the board resets.
@@ -82,6 +92,9 @@
 // Auditory Feedback (Piezo Buzzer)
 #define PIN_BUZZER 23
 #define BUZZER_PWM_CHANNEL 0
+#ifndef BUZZER_ACTIVE
+#define BUZZER_ACTIVE 0  // passive piezo (Wokwi buzzer), driven with tone()
+#endif
 
 // Gate Actuator (Relay / Solenoid Lock)
 #define PIN_RELAY_LOCK 27
@@ -112,8 +125,18 @@
 // ==========================================
 // Timing & Business Rule Constraints (SRS)
 // ==========================================
+#if HAS_RFID
+// RFID gate: after a GRANTED scan every card is ignored while the gate is open,
+// then the buzzer goes "beep-beep" for the next card. A rejected scan does not
+// pause the reader: the next card can be tapped straight away.
+#define SCAN_LOCKOUT_MS GATE_UNLOCK_DURATION_MS
+// No separate per-pass cooldown: the lockout above covers repeat taps, and the
+// backend applies its own cooldown to repeated movements.
+#define SCAN_COOLDOWN_MS 0
+#else
 // FR014: Duplicate scan cooldown period (in milliseconds)
 #define SCAN_COOLDOWN_MS 15000
+#endif
 
 // Network & API Timeouts
 #if SIMULATION_MODE
@@ -124,6 +147,10 @@
 #define HTTP_REQUEST_TIMEOUT_MS 5000
 #endif
 #define WIFI_RECONNECT_INTERVAL_MS 10000
+// How long setup() waits for Wi-Fi before carrying on offline. Phone hotspots
+// often need 6-8 s; connecting here lets NTP and the backend check finish
+// before the first card is tapped.
+#define WIFI_CONNECT_WAIT_MS 12000
 #define NTP_SYNC_INTERVAL_MS 3600000
 
 // Backend scanner API (hostelhive-backend docs/attendance-scans.md)

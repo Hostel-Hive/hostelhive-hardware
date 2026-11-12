@@ -33,6 +33,9 @@ private:
     unsigned long currentBackoffIntervalMs;
     bool connectedState;
     bool timeSynced;
+    long ntpGmtOffsetSec;
+    int ntpDaylightOffsetSec;
+    const char* ntpServerName;
 };
 
 extern NetworkManager networkManager;

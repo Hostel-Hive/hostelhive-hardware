@@ -47,6 +47,9 @@ private:
 #if defined(ESP8266)
     // BearSSL keeps a pointer to the parsed CA list, so it must outlive tlsClient.
     BearSSL::X509List* trustAnchors;
+    // Cached TLS session. A full handshake on the ESP8266 sends the whole
+    // certificate chain and can stall for 15+ s on a weak link; resuming takes ~0.15 s.
+    BearSSL::Session tlsSession;
 #endif
 };
 

@@ -102,7 +102,8 @@ void denyScan(const char* message) {
     feedbackController.triggerFeedback(FeedbackType::ACCESS_DENIED);
 }
 
-void processIncomingScan(const String& rawData) {
+// Returns true only when the gate was opened.
+bool processIncomingScan(const String& rawData) {
     displayDriver.showScanningScreen();
 
     // 1. Only backend-issued "HH1:<64 hex>" passes are considered at all.
@@ -110,10 +111,11 @@ void processIncomingScan(const String& rawData) {
     if (!parsed.isValid) {
         Serial.printf("[CORE] Rejected scan: %s\n", parsed.errorReason.c_str());
         denyScan("INVALID QR CODE");
-        return;
+        return false;
     }
     String redacted = QrScanner::redact(parsed.qrPayload);
 
+#if SCAN_COOLDOWN_MS > 0
     // 2. Local duplicate suppression (FR014). The gate does not reopen for a
     //    repeat; the backend applies its own authoritative cooldown.
     unsigned long remainingCooldown = 0;
@@ -121,24 +123,40 @@ void processIncomingScan(const String& rawData) {
         Serial.printf("[CORE] Duplicate scan %s ignored (%lu s)\n", redacted.c_str(), remainingCooldown);
         displayDriver.showCooldownScreen(remainingCooldown);
         feedbackController.triggerFeedback(FeedbackType::SCAN_COOLDOWN);
-        return;
+        return false;
     }
     qrScanner.registerScan(parsed.qrPayload);
+#endif
 
     // 3. Fail closed: without a confirmed backend decision the gate stays locked.
     //    Offline scans are not queued, because a denied student did not move
     //    and replaying the scan later would record a movement that never happened.
     if (!apiClient.isProvisioned()) {
         denyScan("GATE NOT PROVISIONED");
-        return;
+        return false;
     }
     if (!networkManager.isConnected()) {
         Serial.println("[CORE] Offline: gate stays locked.");
         displayDriver.showOfflineScreen();
         feedbackController.triggerFeedback(FeedbackType::SYSTEM_OFFLINE);
-        return;
+        return false;
     }
 
+#if defined(ESP8266)
+    // HTTPS needs the date to check the certificate. Right after Wi-Fi comes up
+    // SNTP may still be answering: give it a moment, then refuse quickly
+    // instead of failing two TLS attempts.
+    unsigned long clockWaitStart = millis();
+    while (!networkManager.hasValidClock() && millis() - clockWaitStart < 3000) delay(50);
+    if (!networkManager.hasValidClock()) {
+        Serial.println("[CORE] Clock not set by NTP yet: gate stays locked.");
+        displayDriver.showAccessDenied("STARTING UP - TRY AGAIN");
+        feedbackController.triggerFeedback(FeedbackType::SYSTEM_OFFLINE);
+        return false;
+    }
+#endif
+
+    // The buzzer stays silent while the backend decides.
     displayDriver.showVerifyingScreen(redacted);
     ScanResponse response = apiClient.submitScan(parsed.qrPayload);
 
@@ -149,39 +167,71 @@ void processIncomingScan(const String& rawData) {
         displayDriver.showAccessGranted(note, redacted, response.outcome);
         feedbackController.triggerFeedback(FeedbackType::SUCCESS_GRANTED);
         relayController.unlockGate(GATE_UNLOCK_DURATION_MS);
-        return;
+        return true;
     }
 
     Serial.printf("[CORE] Access denied for %s: %s\n", redacted.c_str(), gate::denialMessage(response.decision));
     if (response.decision == gate::Decision::DENY_UNAVAILABLE && response.httpCode <= 0) {
         displayDriver.showOfflineScreen();
         feedbackController.triggerFeedback(FeedbackType::SYSTEM_OFFLINE);
-        return;
+        return false;
     }
     denyScan(gate::denialMessage(response.decision));
+    return false;
 }
 
 #if HAS_RFID
+// While the gate is open after a granted scan, the reader ignores every card;
+// when it closes the buzzer goes "beep-beep" for the next one.
+unsigned long scanLockUntil = 0;
+bool readyBeepPending = false;
+
+void lockScannerWhileGateOpen() {
+    scanLockUntil = millis() + SCAN_LOCKOUT_MS;
+    readyBeepPending = true;
+}
+
+// Short beep the moment a card is read, before anything else happens.
+void acknowledgeTap() {
+    feedbackController.playBlocking(FeedbackType::SCAN_ACK);
+    delay(120);  // a gap so the result beep is heard as a separate sound
+}
+
 // One card per loop: a pass goes through the same path as a QR scan.
+// A rejected card does not pause the reader; only a granted one does.
 void pollRfid() {
+    if (readyBeepPending) {
+        // Cards tapped while the gate is open are not read at all.
+        if ((long)(millis() - scanLockUntil) < 0 || feedbackController.isBusy()) return;
+        readyBeepPending = false;
+        Serial.println("[GATE] Ready for the next card.");
+        feedbackController.triggerFeedback(FeedbackType::SCAN_READY);
+        return;
+    }
+
     CardRead card = rfidReader.poll();
     switch (card.status) {
         case CardStatus::NONE:
             return;
         case CardStatus::PASS:
+            acknowledgeTap();
             Serial.printf("[RFID] Card %s carries pass %s\n", card.uid.c_str(), QrScanner::redact(card.payload).c_str());
-            processIncomingScan(card.payload);
+            if (processIncomingScan(card.payload)) lockScannerWhileGateOpen();
             return;
         case CardStatus::NOT_REGISTERED:
+            acknowledgeTap();
             denyScan("CARD NOT REGISTERED");
             return;
         case CardStatus::CORRUPT:
+            acknowledgeTap();
             denyScan("CARD DATA DAMAGED");
             return;
         case CardStatus::UNSUPPORTED:
+            acknowledgeTap();
             denyScan("UNSUPPORTED CARD");
             return;
         case CardStatus::READ_ERROR:
+            acknowledgeTap();
             denyScan("READ ERROR - TAP AGAIN");
             return;
         case CardStatus::PROVISION_OK:
@@ -210,9 +260,23 @@ void pollRfid() {
 //   wipe                 erase HostelHive data from the next tapped card (NodeMCU)
 //   cancel               abandon a pending provision/wipe
 //   rfid                 RC522 status
+//   buzz                 play every buzzer pattern once
 bool handleSerialCommand(const String& line) {
     if (line == "overrides") {
         overrideLog.dump(Serial);
+        return true;
+    }
+    if (line == "buzz") {
+        const FeedbackType all[] = {FeedbackType::SCAN_ACK,      FeedbackType::SUCCESS_GRANTED,
+                                    FeedbackType::ACCESS_DENIED, FeedbackType::SCAN_READY,
+                                    FeedbackType::ERROR_ALERT,   FeedbackType::SYSTEM_BOOT};
+        for (FeedbackType type : all) {
+            Serial.printf("[BUZZ] %s\n", BuzzerLedController::name(type));
+            feedbackController.playBlocking(type);
+            delay(800);
+        }
+        feedbackController.setGreenLed(false);
+        feedbackController.setRedLed(false);
         return true;
     }
 #if HAS_RFID

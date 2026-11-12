@@ -65,6 +65,10 @@ bool ApiClient::init(const char* url, const char* rootCaPem, const char* deviceC
             return false;
         }
         tlsClient.setTrustAnchors(trustAnchors);
+        // Resume the TLS session on later requests. The certificate was already
+        // verified when the session was created; a server that forgets it just
+        // gets a full (verified) handshake again.
+        tlsClient.setSession(&tlsSession);
 #else
         tlsClient.setCACert(rootCa);
 #endif
@@ -154,8 +158,9 @@ ScanResponse ApiClient::submitScan(const String& qrPayload) {
             // An unparseable 200 has an empty outcome, which decide() denies.
             resp.decision = gate::decide(resp.httpCode, resp.outcome.length() ? resp.outcome.c_str() : nullptr,
                                          resp.errorCode.length() ? resp.errorCode.c_str() : nullptr);
-            Serial.printf("[API] Scan %s -> HTTP %d outcome=%s access=%s error=%s\n", eventId, resp.httpCode,
-                          resp.outcome.c_str(), resp.accessResult.c_str(), resp.errorCode.c_str());
+            Serial.printf("[API] Scan %s -> HTTP %d outcome=%s access=%s error=%s (%lu ms)\n", eventId,
+                          resp.httpCode, resp.outcome.c_str(), resp.accessResult.c_str(), resp.errorCode.c_str(),
+                          millis() - started);
             return resp;
         }
 

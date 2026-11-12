@@ -25,7 +25,7 @@
   <rect x="270" y="80" width="200" height="120" rx="10" fill="#181825" stroke="#cba6f7" stroke-width="2.5"/>
   <text x="370" y="108" text-anchor="middle" font-size="14" font-weight="700" fill="#cba6f7">2 · Gate node</text>
   <text x="370" y="134" text-anchor="middle" font-size="12" fill="#cdd6f4">reads + validates pass</text>
-  <text x="370" y="152" text-anchor="middle" font-size="12" fill="#cdd6f4">15 s duplicate cooldown</text>
+  <text x="370" y="152" text-anchor="middle" font-size="12" fill="#cdd6f4">ignores repeat taps</text>
   <text x="370" y="180" text-anchor="middle" font-size="11" fill="#a6adc8">NodeMCU or ESP32</text>
 
   <!-- 3. Backend -->
@@ -38,10 +38,10 @@
   <!-- 4. Results -->
   <rect x="766" y="70" width="162" height="62" rx="10" fill="#2a2b3d" stroke="#a6e3a1" stroke-width="2"/>
   <text x="847" y="96" text-anchor="middle" font-size="13" font-weight="700" fill="#a6e3a1">Gate opens</text>
-  <text x="847" y="116" text-anchor="middle" font-size="11" fill="#cdd6f4">relay 3 s · high chirp</text>
+  <text x="847" y="116" text-anchor="middle" font-size="11" fill="#cdd6f4">lock opens · short beep</text>
   <rect x="766" y="148" width="162" height="62" rx="10" fill="#2a2b3d" stroke="#f38ba8" stroke-width="2"/>
   <text x="847" y="174" text-anchor="middle" font-size="13" font-weight="700" fill="#f38ba8">Stays locked</text>
-  <text x="847" y="194" text-anchor="middle" font-size="11" fill="#cdd6f4">low buzz · reason logged</text>
+  <text x="847" y="194" text-anchor="middle" font-size="11" fill="#cdd6f4">long beep · reason logged</text>
 
   <!-- arrows -->
   <line x1="222" y1="140" x2="266" y2="140" stroke="#89b4fa" stroke-width="2.5" marker-end="url(#arrow)"/>

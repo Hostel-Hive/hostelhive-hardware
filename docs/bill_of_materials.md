@@ -25,7 +25,7 @@ A lower-cost gate built from a NodeMCU V3 and an RC522 reader. Students tap a MI
 | **Microcontroller** | NodeMCU V3 (ESP-12E "ESP8266MOD", CH340 USB) | Wi-Fi, HTTPS (BearSSL), RFID and gate control |
 | **RFID Reader** | RC522 (MFRC522) 13.56 MHz module, 3.3V | Reads MIFARE Classic 1K cards over SPI |
 | **Student Cards** | MIFARE Classic 1K cards / key tags with the factory key | Carry the student's `HH1:` pass in sector 1 (written with the `provision` command) |
-| **Auditory Feedback** | Passive piezo buzzer + ~100 Ω resistor | Success chirp / denial buzz |
+| **Auditory Feedback** | Active buzzer that works at 3.3 V (e.g. TMB12A12) | Beep patterns: granted, denied, duplicate, offline |
 | **Actuator Control** (optional) | 5V 1-channel **active-LOW** relay module | Drives the solenoid lock |
 | **Status / Override** | Onboard LED and onboard FLASH button | No extra parts needed |
 

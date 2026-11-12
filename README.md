@@ -31,7 +31,8 @@ It is part of **HostelHive**, a hostel management system with a Go backend, a we
 - **Two builds from one codebase:** a low-cost NodeMCU (ESP8266) gate with an RC522 RFID reader, and an ESP32 gate with a QR scanner and OLED screen.
 - **Fails closed:** no Wi-Fi, a timeout, a server error or an odd answer all keep the lock shut. Nothing is queued to be replayed later.
 - **Secure by default:** HTTPS with a pinned root CA, a per-device credential, and passes and credentials are never printed in full to the log.
-- **Duplicate-scan protection:** the same pass is ignored for 15 seconds.
+- **Duplicate-scan protection:** the RFID gate ignores every card while the gate is open (5 seconds after a granted scan); the QR gate ignores the same pass for 15 seconds.
+- **Sound feedback:** different beeps for card read, granted, rejected and ready.
 - **Manual override:** staff hold a button for 1 second to open the gate, and every use is written to an on-device log.
 - **Simulation:** the ESP32 build runs in [Wokwi](https://wokwi.com/) with no hardware at all.
 
@@ -49,7 +50,7 @@ An RFID card stores the same `HH1:` pass that is inside the student's QR code, s
 |:---|:---|:---|
 | Board | NodeMCU V3 (ESP-12E, CH340 USB) | ESP32-WROOM-32 DevKit V1 |
 | Scanner | RC522 RFID reader + MIFARE Classic 1K cards | GM66 / Waveshare UART QR scanner |
-| Feedback | Passive piezo buzzer, onboard LED, serial log | SSD1306 OLED, green + red LEDs, buzzer |
+| Feedback | Active buzzer (beep patterns), onboard LED, serial log | SSD1306 OLED, green + red LEDs, buzzer |
 | Lock | 5 V active-LOW relay module (optional) | 5 V relay module |
 | Override | Onboard FLASH button | Push button + 10 kΩ pull-up |
 | Build | `nodemcu` | `esp32prod` (hardware), `esp32dev` (Wokwi) |
@@ -73,10 +74,30 @@ The full parts list is in [docs/bill_of_materials.md](docs/bill_of_materials.md)
 | RC522 **RST** | `D1` | |
 | RC522 **3.3V** / **GND** | `3V` / `G` | ⚠️ Never 5 V or `VIN`: it damages the RC522 |
 | RC522 **IRQ** | not connected | |
-| Buzzer **+** | `D2` through ~100 Ω | Buzzer **−** to `G` |
+| Buzzer **+** | `D2` | Buzzer **−** to `G`. Active buzzer (e.g. TMB12A12): connect directly |
 | Relay **IN** / **VCC** / **GND** | `D0` / `VIN` / `G` | Use an active-LOW module, so the lock stays shut while the board boots |
 
-The RC522 pins must be soldered. Header pins that only rest in the holes look connected but read as `Firmware Version: 0x0`. A larger "active" or magnetic buzzer needs an NPN transistor (BC547 or 2N2222 with a 1 kΩ base resistor), because an ESP8266 pin supplies only about 12 mA.
+The RC522 pins must be soldered. Header pins that only rest in the holes look connected but read as `Firmware Version: 0x0`.
+
+**Buzzer.** The firmware expects an **active** buzzer (one that beeps by itself on DC, like the TMB12A12). Check yours first: touch it between `3V` and `G`. If it beeps, wire it straight to `D2` and `G`. For a passive piezo, add ~100 Ω in series and build with `-D BUZZER_ACTIVE=0`. For a permanent install, drive the buzzer through an NPN transistor (S8050, BC547 or 2N2222, 1 kΩ base resistor, 1N4148 across the buzzer), because an ESP8266 pin supplies only about 12 mA. Never put the buzzer between `VIN` (5 V) and a GPIO pin: that puts 5 V on a 3.3 V pin.
+
+A scan sounds like this:
+
+1. **Tap** → short *beep*: the card was read.
+2. Silence while the backend decides (usually under a second).
+3. **Granted** → short *beep*. The gate stays open for **5 seconds**, and every card tapped in that time is ignored. Then *beep-beep*: ready for the next card.
+4. **Rejected** → one **long beep**. The next card can be tapped straight away.
+
+| Sound | Meaning |
+|:---|:---|
+| Short beep, right after the tap | Card read |
+| Short beep | Access granted |
+| Long beep | Rejected: unknown or inactive pass, unregistered card, read error, or offline |
+| Beep-beep | Gate closed again, ready for the next card |
+| Extra-long beep | Error (for example a card write that timed out) |
+| 2 short chirps | Board started |
+
+Send `buzz` in the serial monitor to hear them all. The gate-open time is `GATE_UNLOCK_DURATION_MS` in `include/config.h`, and the patterns are at the top of `src/buzzer_led.cpp`.
 
 ### ESP32 + QR scanner
 
@@ -175,6 +196,7 @@ You can also type these commands into any serial monitor (115200 baud, "New Line
 | `wipe` | Erase the HostelHive data from the next card tapped |
 | `cancel` | Stop waiting for a card |
 | `rfid` | Show the RC522 status |
+| `buzz` | Play every buzzer pattern |
 | `overrides` | Print the manual-override log |
 
 Only cards with the factory key (`FF FF FF FF FF FF`) can be written. The pass is stored in sector 1, blocks 4 to 6, with a checksum, so a half-written card is rejected instead of opening the gate (layout in `include/card_format.h`). A card holds the same pass as the student's QR code: treat a lost card like a leaked QR code.

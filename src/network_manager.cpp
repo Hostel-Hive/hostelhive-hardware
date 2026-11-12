@@ -26,7 +26,8 @@ static bool readLocalTime(struct tm* info, uint32_t waitMs) {
 NetworkManager::NetworkManager()
     : wifiSsid(nullptr), wifiPassword(nullptr),
       lastReconnectAttempt(0), currentBackoffIntervalMs(WIFI_RECONNECT_INTERVAL_MS),
-      connectedState(false), timeSynced(false) {}
+      connectedState(false), timeSynced(false),
+      ntpGmtOffsetSec(0), ntpDaylightOffsetSec(0), ntpServerName(nullptr) {}
 
 void NetworkManager::init(const char* ssid, const char* password) {
     wifiSsid = ssid;
@@ -50,7 +51,7 @@ void NetworkManager::init(const char* ssid, const char* password) {
     }
 
     unsigned long startWait = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - startWait < 5000)) {
+    while (WiFi.status() != WL_CONNECTED && (millis() - startWait < WIFI_CONNECT_WAIT_MS)) {
         delay(250);
         Serial.print(".");
     }
@@ -68,6 +69,11 @@ void NetworkManager::init(const char* ssid, const char* password) {
 }
 
 void NetworkManager::initTimeSync(long gmtOffsetSec, int daylightOffsetSec, const char* ntpServer) {
+    // Kept so update() can ask again the moment Wi-Fi comes up.
+    ntpGmtOffsetSec = gmtOffsetSec;
+    ntpDaylightOffsetSec = daylightOffsetSec;
+    ntpServerName = ntpServer;
+
     if (!isConnected()) {
 #if defined(ESP8266)
         // The ESP8266 SNTP client keeps retrying in the background, so start it
@@ -126,8 +132,25 @@ void NetworkManager::update() {
             Serial.print("[NETWORK] Wi-Fi link re-established. IP: ");
             Serial.println(WiFi.localIP());
             currentBackoffIntervalMs = WIFI_RECONNECT_INTERVAL_MS; // Reset backoff
+            // A request sent while offline may sit in a long SNTP retry wait;
+            // ask now so HTTPS (which needs the date) works within seconds.
+            if (ntpServerName != nullptr && !hasValidClock()) {
+                Serial.println("[NTP] Wi-Fi up: requesting time...");
+                configTime(ntpGmtOffsetSec, ntpDaylightOffsetSec, ntpServerName);
+            }
         } else {
             Serial.println("[NETWORK] Wi-Fi link lost! Falling back to offline buffer.");
+        }
+    }
+
+    // Report the moment a background SNTP request sets the clock.
+    if (!timeSynced && hasValidClock()) {
+        timeSynced = true;
+        struct tm timeinfo;
+        if (readLocalTime(&timeinfo, 0)) {
+            char buf[32];
+            strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &timeinfo);
+            Serial.printf("[NTP] Time synchronized: %s\n", buf);
         }
     }
 

@@ -78,14 +78,15 @@
   <!-- ===== Buzzer ===== -->
   <rect x="740" y="170" width="180" height="130" rx="10" fill="#2a2b3d" stroke="#f9e2af" stroke-width="2"/>
   <text x="830" y="198" text-anchor="middle" font-size="16" font-weight="700" fill="#f9e2af">Buzzer</text>
-  <text x="830" y="215" text-anchor="middle" font-size="11" fill="#a6adc8">passive piezo</text>
+  <text x="830" y="215" text-anchor="middle" font-size="11" fill="#a6adc8">active, 3.3 V (TMB12A12)</text>
   <g font-family="Consolas, monospace" font-size="13" font-weight="700" fill="#fab387">
     <text x="752" y="214">+</text>
     <text x="752" y="274">−</text>
   </g>
-  <!-- D2 -> resistor -> + -->
-  <polyline points="590,210 630,210 636,200 648,220 660,200 672,220 684,200 690,210 740,210" fill="none" stroke="#f9e2af" stroke-width="2.5"/>
-  <text x="660" y="196" text-anchor="middle" font-size="11" fill="#f9e2af">≈100 Ω</text>
+  <!-- D2 -> + (direct for an active buzzer) -->
+  <line x1="590" y1="210" x2="740" y2="210" stroke="#f9e2af" stroke-width="2.5"/>
+  <text x="665" y="200" text-anchor="middle" font-size="10.5" fill="#f9e2af">direct, no resistor</text>
+  <text x="830" y="292" text-anchor="middle" font-size="10" fill="#6c7086">passive piezo: add ≈100 Ω</text>
   <line x1="590" y1="270" x2="740" y2="270" stroke="#6c7086" stroke-width="2.5" stroke-dasharray="6 4"/>
   <circle cx="590" cy="210" r="4" fill="#1e1e2e" stroke="#f9e2af" stroke-width="2"/>
   <circle cx="590" cy="270" r="4" fill="#1e1e2e" stroke="#6c7086" stroke-width="2"/>

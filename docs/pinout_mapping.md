@@ -33,7 +33,7 @@ Two builds share the same firmware: the ESP32 QR gate (`esp32dev` / `esp32prod`)
 | **RC522 RST** | `D1` | 5 | Reader reset |
 | **RC522 IRQ** | not connected | | Polled, not interrupt driven |
 | **RC522 3.3V / GND** | `3V` / `G` | | **3.3V only.** 5V damages the RC522 |
-| **Passive Piezo Buzzer (+)** | `D2` | 4 | Through ~100 Ω; `-` to `G`. LOW at boot, so no chirp on reset |
+| **Buzzer (+)** | `D2` | 4 | Active buzzer (e.g. TMB12A12) directly; passive piezo through ~100 Ω. `-` to `G`. LOW at boot, so silent on reset |
 | **Gate Lock Relay IN** | `D0` | 16 | Use an **active-LOW** relay module: GPIO16 is HIGH during boot, which keeps an active-LOW relay off. Relay VCC from `VIN` (5V) |
 | **Status LED** | onboard (`D4`) | 2 | Blue LED next to the antenna, lit on LOW |
 | **Manual Override** | onboard `FLASH` button (`D3`) | 0 | Hold 1 s to unlock (logged). Don't hold it while powering on: the board would enter flash mode |
